@@ -12,11 +12,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/lib/AuthContext';
-import { logout } from '@/lib/firebase';
 
 export function Sidebar() {
-  const { role } = useAuth();
   const navigate = useNavigate();
 
   const navItems = [
@@ -30,10 +27,9 @@ export function Sidebar() {
     { icon: ShieldCheck, label: 'Admin Panel', path: '/dashboard/admin', roles: ['admin'] },
   ];
 
-  const filteredNavItems = navItems.filter(item => item.roles.includes(role || ''));
+  const filteredNavItems = navItems.filter(item => item.roles.includes('admin') || item.roles.includes('student'));
 
   const handleLogout = async () => {
-    await logout();
     navigate('/');
   };
 

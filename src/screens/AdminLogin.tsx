@@ -1,20 +1,23 @@
-
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ShieldCheck, ArrowRight, Globe } from 'lucide-react';
-import { signInWithGoogle } from '@/lib/firebase';
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { ShieldCheck, ArrowRight, Globe } from "lucide-react";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
 
   const handleAdminLogin = async () => {
     try {
-      await signInWithGoogle();
-      navigate('/dashboard/admin');
+      navigate("/dashboard/admin");
     } catch (error) {
-      console.error('Admin login failed:', error);
+      console.error("Admin login failed:", error);
     }
   };
 
@@ -28,26 +31,30 @@ export default function AdminLogin() {
           <div className="space-y-2">
             <CardTitle className="text-3xl font-bold">Admin Portal</CardTitle>
             <CardDescription>
-              Secure access for Let's Fly Together consultants and administrators.
+              Secure access for Let's Fly Together consultants and
+              administrators.
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl text-amber-800 text-sm flex gap-3">
             <Globe className="w-5 h-5 shrink-0" />
-            <p>Authorized personnel only. All access attempts are logged and monitored.</p>
+            <p>
+              Authorized personnel only. All access attempts are logged and
+              monitored.
+            </p>
           </div>
-          <Button 
+          <Button
             onClick={handleAdminLogin}
             className="w-full h-14 text-lg font-bold rounded-xl shadow-lg shadow-primary/20"
           >
-            Login with Google
+            Access Admin Portal
             <ArrowRight className="ml-2 w-5 h-5" />
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="w-full"
-            onClick={() => navigate('/')}
+            onClick={() => navigate("/")}
           >
             Back to Home
           </Button>
