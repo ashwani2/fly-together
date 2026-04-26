@@ -26,7 +26,7 @@ export interface University {
 export interface ServiceProvider {
   id: string;
   name: string;
-  category: 'Accommodation' | 'Ticket Booking' | 'Loans' | 'Logistics';
+  category: 'Accommodation' | 'Ticket Booking' | 'Loans' | 'Logistics' | 'Online Payment';
   rating: number;
   price: string;
   location?: string;

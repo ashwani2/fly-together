@@ -26,7 +26,16 @@ const steps: { label: ApplicationStatus; icon: any }[] = [
   { label: 'Payment', icon: CreditCard },
 ];
 
+import { useAuth } from '@/lib/AuthContext';
+import { Navigate } from 'react-router-dom';
+
 export default function Dashboard() {
+  const { role, user } = useAuth();
+  
+  if (role === 'admin') {
+    return <Navigate to="/dashboard/admin" replace />;
+  }
+
   const currentStepIndex = steps.findIndex(s => s.label === mockStudent.status);
 
   return (
@@ -60,15 +69,15 @@ export default function Dashboard() {
               return (
                 <div key={step.label} className="flex flex-col items-center gap-3 relative z-10 group">
                   <div className={cn(
-                    "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 border-2",
+                    "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-300 border-2",
                     isCompleted ? "bg-primary border-primary text-primary-foreground" : 
                     isCurrent ? "bg-background border-primary text-primary shadow-lg scale-110" : 
                     "bg-background border-muted text-muted-foreground"
                   )}>
-                    {isCompleted ? <CheckCircle2 className="w-6 h-6" /> : <step.icon className="w-6 h-6" />}
+                    {isCompleted ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <step.icon className="w-5 h-5 md:w-6 md:h-6" />}
                   </div>
                   <span className={cn(
-                    "text-xs font-medium transition-colors",
+                    "text-[10px] md:text-xs font-medium transition-colors hidden sm:block",
                     isCurrent ? "text-primary" : "text-muted-foreground"
                   )}>
                     {step.label}
@@ -77,9 +86,9 @@ export default function Dashboard() {
               );
             })}
             {/* Connector Line */}
-            <div className="absolute top-6 left-0 w-full h-[2px] bg-muted -z-0" />
+            <div className="absolute top-5 md:top-6 left-0 w-full h-[2px] bg-muted -z-0" />
             <div 
-              className="absolute top-6 left-0 h-[2px] bg-primary transition-all duration-500 -z-0" 
+              className="absolute top-5 md:top-6 left-0 h-[2px] bg-primary transition-all duration-500 -z-0" 
               style={{ width: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
             />
           </div>
@@ -92,13 +101,13 @@ export default function Dashboard() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Active Application</CardTitle>
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">In Review</Badge>
+              <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">In Review</Badge>
             </div>
             <CardDescription>Details of your primary university application.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center gap-4 p-4 rounded-xl border bg-muted/30">
-              <div className="w-16 h-16 rounded-lg bg-white border flex items-center justify-center p-2">
+              <div className="w-16 h-16 rounded-lg bg-white dark:bg-white/90 border flex items-center justify-center p-2">
                 <img src="https://logo.clearbit.com/ox.ac.uk" alt="Oxford" className="w-full h-full object-contain" />
               </div>
               <div>

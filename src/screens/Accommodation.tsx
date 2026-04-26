@@ -45,7 +45,7 @@ export default function Accommodation() {
   const [selectedId, setSelectedId] = useState('a1');
 
   return (
-    <div className="h-[calc(100vh-12rem)] flex flex-col gap-6">
+    <div className="md:h-[calc(100vh-12rem)] flex flex-col gap-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Accommodation</h1>
@@ -57,10 +57,10 @@ export default function Accommodation() {
         </div>
       </div>
 
-      <div className="flex-1 flex gap-6 overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden">
         {/* List View */}
-        <ScrollArea className="w-full md:w-1/3 pr-4">
-          <div className="space-y-4">
+        <ScrollArea className="w-full md:w-1/3">
+          <div className="space-y-4 pb-4 md:pr-4">
             {accommodations.map((acc) => (
               <Card 
                 key={acc.id} 
@@ -72,13 +72,13 @@ export default function Accommodation() {
               >
                 <div className="relative h-32">
                   <img src={acc.image} alt={acc.name} className="w-full h-full object-cover rounded-t-xl" referrerPolicy="no-referrer" />
-                  <Badge className="absolute top-2 right-2 bg-white/90 text-black">{acc.price}</Badge>
+                  <Badge className="absolute top-2 right-2 bg-card/90 text-card-foreground border-border">{acc.price}</Badge>
                 </div>
                 <CardContent className="p-4 space-y-2">
                   <div className="flex justify-between items-start">
                     <h3 className="font-bold text-sm">{acc.name}</h3>
-                    <div className="flex items-center text-xs font-bold text-amber-600">
-                      <Star className="w-3 h-3 mr-0.5 fill-amber-600" />
+                    <div className="flex items-center text-xs font-bold text-amber-500">
+                      <Star className="w-3 h-3 mr-0.5 fill-amber-500" />
                       {acc.rating}
                     </div>
                   </div>
@@ -112,9 +112,9 @@ export default function Accommodation() {
           </div>
 
           {/* Mock Map Markers */}
-          <div className="absolute top-1/4 left-1/3 w-8 h-8 bg-primary rounded-full border-4 border-white shadow-lg animate-bounce" />
-          <div className="absolute bottom-1/3 right-1/4 w-8 h-8 bg-primary/60 rounded-full border-4 border-white shadow-lg" />
-          <div className="absolute top-1/2 right-1/3 w-8 h-8 bg-primary/40 rounded-full border-4 border-white shadow-lg" />
+          <div className="absolute top-1/4 left-1/3 w-8 h-8 bg-primary rounded-full border-4 border-card shadow-lg animate-bounce" />
+          <div className="absolute bottom-1/3 right-1/4 w-8 h-8 bg-primary/60 rounded-full border-4 border-card shadow-lg" />
+          <div className="absolute top-1/2 right-1/3 w-8 h-8 bg-primary/40 rounded-full border-4 border-card shadow-lg" />
         </div>
       </div>
     </div>

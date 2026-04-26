@@ -43,11 +43,11 @@ export default function Universities() {
           <Card key={uni.id} className="group hover:shadow-lg transition-all duration-300 border-muted/60">
             <CardHeader className="relative pb-0">
               <div className="flex justify-between items-start">
-                <div className="w-16 h-16 rounded-xl border bg-white p-2 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                <div className="w-16 h-16 rounded-xl border bg-white dark:bg-white/90 p-2 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <img src={uni.logo} alt={uni.name} className="w-full h-full object-contain" />
                 </div>
-                <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200">
-                  <Star className="w-3 h-3 mr-1 fill-amber-700" />
+                <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 border-amber-500/20">
+                  <Star className="w-3 h-3 mr-1 fill-amber-500" />
                   {uni.rating}
                 </Badge>
               </div>

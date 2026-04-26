@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 const categories = [
   { icon: Home, label: 'Accommodation', color: 'bg-blue-500' },
   { icon: Plane, label: 'Ticket Booking', color: 'bg-indigo-500' },
-  { icon: CreditCard, label: 'Loans', color: 'bg-emerald-500' },
-  { icon: Truck, label: 'Logistics', color: 'bg-amber-500' },
+  { icon: CreditCard, label: 'Online Payment', color: 'bg-emerald-500' },
+  { icon: Truck, label: 'Royal Rahi Logistics', color: 'bg-amber-500' },
 ];
 
 export default function Marketplace() {
@@ -53,7 +53,7 @@ export default function Marketplace() {
                   referrerPolicy="no-referrer"
                 />
                 <div className="absolute top-4 right-4">
-                  <Badge className="bg-white/90 backdrop-blur text-black hover:bg-white">
+                  <Badge className="bg-card/90 backdrop-blur text-card-foreground border-border hover:bg-card">
                     <Star className="w-3 h-3 mr-1 fill-amber-500 text-amber-500" />
                     {service.rating}
                   </Badge>

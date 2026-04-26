@@ -9,32 +9,43 @@ import {
   FileText, 
   Settings, 
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  School,
+  Handshake
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/AuthContext';
+import { logout } from '@/lib/firebase';
 
-export function Sidebar() {
+export function Sidebar({ className, onSettingsClick }: { className?: string, onSettingsClick?: () => void }) {
+  const { role } = useAuth();
   const navigate = useNavigate();
 
-  const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['student', 'admin'] },
-    { icon: UserCircle, label: 'Profile & Docs', path: '/dashboard/profile', roles: ['student', 'admin'] },
-    { icon: Home, label: 'Accommodation', path: '/dashboard/accommodation', roles: ['student', 'admin'] },
-    { icon: FileText, label: 'Applications', path: '/dashboard/applications', roles: ['student', 'admin'] },
-    // Admin only items
-    { icon: GraduationCap, label: 'Universities', path: '/dashboard/universities', roles: ['admin'] },
-    { icon: ShoppingBag, label: 'Marketplace', path: '/dashboard/marketplace', roles: ['admin'] },
-    { icon: ShieldCheck, label: 'Admin Panel', path: '/dashboard/admin', roles: ['admin'] },
+  const studentNavItems = [
+    { icon: LayoutDashboard, label: 'Explore', path: '/dashboard' },
+    { icon: GraduationCap, label: 'Universities', path: '/dashboard/uni' },
+    { icon: Home, label: 'Accommodation', path: '/dashboard/accommodation' },
+    { icon: FileText, label: 'My Progress', path: '/dashboard/applications' },
+    { icon: ShoppingBag, label: 'Marketplace', path: '/dashboard/market' }, 
+    { icon: UserCircle, label: 'Profile & Docs', path: '/dashboard/profile' },
   ];
 
-  const filteredNavItems = navItems.filter(item => item.roles.includes('admin') || item.roles.includes('student'));
+  const adminNavItems = [
+    { icon: ShieldCheck, label: 'Applications', path: '/dashboard/admin' },
+    { icon: School, label: 'Universities', path: '/dashboard/admin/universities' },
+    { icon: Home, label: 'Accommodations', path: '/dashboard/admin/accommodations' },
+    { icon: Handshake, label: 'Partners', path: '/dashboard/admin/partners' },
+  ];
+
+  const filteredNavItems = role === 'admin' ? adminNavItems : studentNavItems;
 
   const handleLogout = async () => {
+    await logout();
     navigate('/');
   };
 
   return (
-    <aside className="w-64 border-r bg-card h-screen flex flex-col sticky top-0">
+    <aside className={cn("w-64 border-r bg-card h-screen flex flex-col sticky top-0", className)}>
       <Link to="/" className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity">
         <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-bold text-xl">
           F
@@ -47,6 +58,7 @@ export function Sidebar() {
           <NavLink
             key={item.path}
             to={item.path}
+            end={item.path === '/dashboard' || item.path === '/dashboard/admin'}
             className={({ isActive }) => cn(
               "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
               isActive 
@@ -61,7 +73,10 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t space-y-1">
-        <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground w-full transition-colors">
+        <button 
+          onClick={onSettingsClick}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground w-full transition-colors"
+        >
           <Settings className="w-5 h-5" />
           Settings
         </button>

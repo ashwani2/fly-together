@@ -9,9 +9,16 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { mockDocuments } from '@/mockData';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function Profile() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'personal' | 'documents'>('personal');
+
+  const fullName = user?.displayName || 'Alex Johnson';
+  const firstName = fullName.split(' ')[0];
+  const lastName = fullName.split(' ').slice(1).join(' ') || '';
+  const email = user?.email || 'alex.j@example.com';
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -51,21 +58,21 @@ export default function Profile() {
               <CardDescription>Update your basic information for university applications.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue="Alex" />
+                  <Input id="firstName" defaultValue={firstName} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue="Johnson" />
+                  <Input id="lastName" defaultValue={lastName} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" defaultValue="alex.j@example.com" />
+                <Input id="email" type="email" defaultValue={email} disabled />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
                   <Input id="phone" defaultValue="+44 7700 900000" />
