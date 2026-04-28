@@ -347,7 +347,7 @@ export default function LandingPage() {
                 <li><a href="#" className="hover:text-primary transition-colors">Home</a></li>
                 <li><a href="#services" className="hover:text-primary transition-colors">Our Services</a></li>
                 <li><a href="#about" className="hover:text-primary transition-colors">About Us</a></li>
-                <li><a href="/dashboard" className="hover:text-primary transition-colors">Student Portal</a></li>
+                 <li><button onClick={handleConnect} className="hover:text-primary transition-colors cursor-pointer text-left">Student Portal</button></li>
                 <li><Link to="/admin-login" className="hover:text-primary transition-colors text-slate-500">Admin Portal</Link></li>
               </ul>
             </div>
