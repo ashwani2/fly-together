@@ -51,12 +51,12 @@ export default function AdminPartners() {
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
+          <DialogTrigger render={
             <Button className="gap-2">
               <Handshake className="w-4 h-4" />
               Invite Partner
             </Button>
-          </DialogTrigger>
+          } />
           <DialogContent>
             <form onSubmit={handleAddPartner}>
               <DialogHeader>

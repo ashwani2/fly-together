@@ -19,6 +19,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Sidebar } from './Sidebar';
+import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { mockNotifications } from '@/mockData';
 import { useAuth } from '@/lib/AuthContext';
 import { logout } from '@/lib/firebase';
@@ -47,8 +48,10 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
               <Menu className="w-5 h-5" />
             </Button>
           } />
-          <SheetContent side="left" className="p-0 w-64">
-            <Sidebar className="border-none" onSettingsClick={onSettingsClick} />
+          <SheetContent side="left" className="p-0 w-64 border-none">
+            <ThemeScopeWrapper scope={role === 'admin' ? 'admin' : 'student'} className="min-h-0 h-full">
+              <Sidebar className="border-none" onSettingsClick={onSettingsClick} />
+            </ThemeScopeWrapper>
           </SheetContent>
         </Sheet>
         

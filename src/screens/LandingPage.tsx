@@ -15,7 +15,11 @@ import {
   FileCheck,
   Truck,
   Menu,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Quote,
+  Video
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,12 +28,56 @@ import { useAuth } from '@/lib/AuthContext';
 import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Moon, Sun, Settings } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { mockTestimonials } from '@/mockData';
+import { Testimonial } from '@/types';
+import { AnimatePresence } from 'motion/react';
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const { loginAsDummy } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [testimonialList, setTestimonialList] = React.useState<Testimonial[]>(() => {
+    try {
+      const saved = localStorage.getItem('testimonials');
+      return saved ? JSON.parse(saved) : mockTestimonials;
+    } catch (e) {
+      console.error('Failed to parse testimonials from localStorage', e);
+      return mockTestimonials;
+    }
+  });
+  const [currentTestimonialIdx, setCurrentTestimonialIdx] = React.useState(0);
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('testimonials');
+      if (saved) {
+        setTestimonialList(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Failed to parse testimonials in useEffect', e);
+    }
+  }, []);
+
+  // Auto-scroll logic
+  React.useEffect(() => {
+    if (testimonialList.length <= 1) return;
+    
+    const interval = setInterval(() => {
+      nextTestimonial();
+    }, 5000); // Change every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [testimonialList.length, currentTestimonialIdx]);
+
+  const nextTestimonial = () => {
+    setCurrentTestimonialIdx((prev) => (prev + 1) % testimonialList.length);
+  };
+
+  const prevTestimonial = () => {
+    setCurrentTestimonialIdx((prev) => (prev - 1 + testimonialList.length) % testimonialList.length);
+  };
 
   const handleConnect = () => {
     if (loginAsDummy) {
@@ -54,6 +102,7 @@ export default function LandingPage() {
               <a href="#services" className="text-sm font-medium hover:text-primary transition-colors">Our Services</a>
               <a href="#about" className="text-sm font-medium hover:text-primary transition-colors">About Us</a>
               <a href="#universities" className="text-sm font-medium hover:text-primary transition-colors">Universities</a>
+              <Link to="/blog" className="text-sm font-medium hover:text-primary transition-colors">Blog</Link>
               
               <div className="w-px h-6 bg-border mx-2" />
               
@@ -70,7 +119,7 @@ export default function LandingPage() {
                 onClick={handleConnect}
                 className="bg-primary hover:bg-primary/90 shadow-md hover:shadow-lg transition-all duration-300 px-6 rounded-full font-semibold"
               >
-                Connect <ArrowRight className="ml-2 w-4 h-4" />
+                Student Portal <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </div>
 
@@ -102,8 +151,9 @@ export default function LandingPage() {
             <a href="#services" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">Our Services</a>
             <a href="#about" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">About Us</a>
             <a href="#universities" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">Universities</a>
-            <Button onClick={handleConnect} className="w-full rounded-full">
-              Connect <ArrowRight className="ml-2 w-4 h-4" />
+            <Link to="/blog" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">Blog</Link>
+            <Button onClick={handleConnect} className="w-full rounded-full text-lg h-12">
+              Student Portal <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </motion.div>
         )}
@@ -326,6 +376,114 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Testimonials Section */}
+      <section className="py-24 bg-primary/5 overflow-hidden">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                <Quote className="w-4 h-4" />
+                <span>Student Success Stories</span>
+              </div>
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Voices of Inspiration</h2>
+            </div>
+            <div className="flex gap-4">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={prevTestimonial}
+                className="rounded-full h-12 w-12 border-primary/20 hover:bg-primary/5 transition-all"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={nextTestimonial}
+                className="rounded-full h-12 w-12 border-primary/20 hover:bg-primary/5 transition-all"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative min-h-[500px]">
+             <AnimatePresence mode="wait">
+               {testimonialList.length > 0 && (
+                 <motion.div
+                   key={testimonialList[currentTestimonialIdx].id}
+                   initial={{ opacity: 0, x: 50 }}
+                   animate={{ opacity: 1, x: 0 }}
+                   exit={{ opacity: 0, x: -50 }}
+                   transition={{ duration: 0.5 }}
+                   className="grid lg:grid-cols-2 gap-12 items-center"
+                 >
+                   <div className="order-2 lg:order-1 space-y-8">
+                     <Quote className="w-16 h-16 text-primary/10 -mb-4 -ml-4" />
+                     <p className="text-2xl md:text-3xl font-medium leading-relaxed italic text-foreground/90">
+                       "{testimonialList[currentTestimonialIdx].content}"
+                     </p>
+                     
+                     <div className="flex items-center gap-4">
+                       <div className="w-16 h-16 rounded-full border-2 border-primary overflow-hidden shadow-lg">
+                         <img 
+                           src={testimonialList[currentTestimonialIdx].avatarUrl} 
+                           alt={testimonialList[currentTestimonialIdx].studentName}
+                           className="w-full h-full object-cover"
+                         />
+                       </div>
+                       <div className="flex flex-col">
+                         <span className="text-xl font-bold">{testimonialList[currentTestimonialIdx].studentName}</span>
+                         <span className="text-muted-foreground">{testimonialList[currentTestimonialIdx].universityName}</span>
+                       </div>
+                     </div>
+                   </div>
+
+                   <div className="order-1 lg:order-2 relative aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl border-4 border-background group">
+                      {testimonialList[currentTestimonialIdx].mediaType === 'image' ? (
+                        <img 
+                          src={testimonialList[currentTestimonialIdx].mediaUrl} 
+                          alt="Student success"
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+                          <Video className="w-16 h-16 text-white/50" />
+                          <p className="absolute bottom-4 left-4 text-white p-2 rounded-lg bg-black/50 text-xs flex items-center gap-2">
+                             <Video className="w-3 h-3" /> Video Testimonial
+                          </p>
+                          {/* In a real app, use a video player here */}
+                          <iframe 
+                            className="w-full h-full"
+                            src={testimonialList[currentTestimonialIdx].mediaUrl.replace('watch?v=', 'embed/')} 
+                            title="Video testimony"
+                            allowFullScreen
+                          ></iframe>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+                   </div>
+                 </motion.div>
+               )}
+             </AnimatePresence>
+
+             {/* Indicators */}
+             <div className="flex gap-2 mt-12 justify-center lg:justify-start">
+               {testimonialList.map((_, i) => (
+                 <button
+                   key={i}
+                   onClick={() => setCurrentTestimonialIdx(i)}
+                   className={cn(
+                     "h-2 rounded-full transition-all duration-300",
+                     currentTestimonialIdx === i ? "w-8 bg-primary" : "w-2 bg-primary/20"
+                   )}
+                 />
+               ))}
+             </div>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-300 py-20">
         <div className="container mx-auto px-4">
@@ -347,7 +505,7 @@ export default function LandingPage() {
                 <li><a href="#" className="hover:text-primary transition-colors">Home</a></li>
                 <li><a href="#services" className="hover:text-primary transition-colors">Our Services</a></li>
                 <li><a href="#about" className="hover:text-primary transition-colors">About Us</a></li>
-                 <li><button onClick={handleConnect} className="hover:text-primary transition-colors cursor-pointer text-left">Student Portal</button></li>
+                <li><button onClick={handleConnect} className="hover:text-primary transition-colors cursor-pointer text-left">Student Portal</button></li>
                 <li><Link to="/admin-login" className="hover:text-primary transition-colors text-slate-500">Admin Portal</Link></li>
               </ul>
             </div>

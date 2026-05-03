@@ -43,44 +43,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const savedDummy = localStorage.getItem('dummyUser');
-    const savedAdmin = localStorage.getItem('dummyAdmin');
+    try {
+      const savedDummy = localStorage.getItem('dummyUser');
+      const savedAdmin = localStorage.getItem('dummyAdmin');
 
-    if (savedAdmin) {
-      setUser(JSON.parse(savedAdmin));
-      setRole('admin');
-      setLoading(false);
-      return;
-    }
+      if (savedAdmin) {
+        setUser(JSON.parse(savedAdmin));
+        setRole('admin');
+        setLoading(false);
+        return;
+      }
 
-    if (savedDummy) {
-      setUser(JSON.parse(savedDummy));
-      setRole('student');
-      setLoading(false);
-      return;
+      if (savedDummy) {
+        setUser(JSON.parse(savedDummy));
+        setRole('student');
+        setLoading(false);
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to parse saved user from localStorage', e);
+      localStorage.removeItem('dummyUser');
+      localStorage.removeItem('dummyAdmin');
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        // Special case for admins
-        if (user.email === 'ashwani.kumar1406@gmail.com' || user.email === 'admin@email.com') {
-          setRole('admin');
-        } else {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            setRole(userDoc.data().role);
+      try {
+        if (user) {
+          setUser(user);
+          if (user.email === 'ashwani.kumar1406@gmail.com' || user.email === 'admin@email.com') {
+            setRole('admin');
           } else {
-            setRole('student');
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              setRole(userDoc.data().role);
+            } else {
+              setRole('student');
+            }
           }
+        } else {
+          setUser(null);
+          setRole(null);
         }
-      } else {
+      } catch (err) {
+        console.error("Auth state processing error:", err);
         setRole(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Final safety to prevent infinite loading if firebase is slow
+    const safetyTimeout = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) console.warn("Auth loading timed out, forcing complete.");
+        return false;
+      });
+    }, 8000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   return (

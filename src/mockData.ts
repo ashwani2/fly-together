@@ -1,5 +1,65 @@
 
-import { Student, University, ServiceProvider, Document, Notification } from './types';
+import { Student, University, ServiceProvider, Document, Notification, Testimonial, BlogPost } from './types';
+
+export const mockBlogPosts: BlogPost[] = [
+  {
+    id: 'b1',
+    title: 'Top 5 UK Universities for 2024 International Students',
+    slug: 'top-5-uk-universities-2024',
+    excerpt: 'Explore the best picks for academic excellence, student life, and career prospects in the United Kingdom this year.',
+    content: 'Choosing the right university is a pivotal decision... (full content here)',
+    coverImage: 'https://images.unsplash.com/photo-1541339907198-e08756eaa539?auto=format&fit=crop&q=80&w=1200',
+    author: 'UniFlow Editorial',
+    date: '2024-03-25',
+    category: 'Education',
+    readTime: '6 min read'
+  },
+  {
+    id: 'b2',
+    title: 'How to Secure an Education Loan without Collateral',
+    slug: 'education-loan-no-collateral',
+    excerpt: 'Detailed guide on financing your overseas education through student loans with favorable terms.',
+    content: 'Financial barriers shouldn\'t stop your dreams... (full content here)',
+    coverImage: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1200',
+    author: 'Finance Team',
+    date: '2024-03-10',
+    category: 'Finance',
+    readTime: '8 min read'
+  }
+];
+
+export const mockTestimonials: Testimonial[] = [
+  {
+    id: 't1',
+    studentName: 'Aarav Sharma',
+    universityName: 'University of Oxford',
+    content: 'The journey from application to arrival was seamless. UniFlow handled all my documents and even helped me find a great studio apartment near campus.',
+    mediaUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aarav',
+    date: '2024-02-15'
+  },
+  {
+    id: 't2',
+    studentName: 'Priya Patel',
+    universityName: 'Imperial College London',
+    content: 'Getting my visa and student loan was my biggest worry, but the team here made it look easy. Highly recommend their education loan assistance!',
+    mediaUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Priya',
+    date: '2024-01-20'
+  },
+  {
+    id: 't3',
+    studentName: 'Michael Chen',
+    universityName: 'University of Manchester',
+    content: 'The logistics service was a lifesaver. My 30kg of books and clothes reached my room even before I landed. Brilliant support!',
+    mediaUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800',
+    mediaType: 'image',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
+    date: '2024-03-05'
+  }
+];
 
 export const mockStudent: Student = {
   id: '1',

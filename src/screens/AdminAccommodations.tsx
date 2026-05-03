@@ -49,12 +49,12 @@ export default function AdminAccommodations() {
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
+          <DialogTrigger render={
             <Button className="gap-2">
               <Plus className="w-4 h-4" />
               New Listing
             </Button>
-          </DialogTrigger>
+          } />
           <DialogContent>
             <form onSubmit={handleAddAcc}>
               <DialogHeader>

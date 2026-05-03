@@ -48,3 +48,27 @@ export interface Notification {
   time: string;
   type: 'info' | 'success' | 'warning';
 }
+
+export interface Testimonial {
+  id: string;
+  studentName: string;
+  universityName?: string;
+  content: string;
+  mediaUrl: string;
+  mediaType: 'image' | 'video';
+  avatarUrl?: string;
+  date: string;
+}
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  coverImage: string;
+  author: string;
+  date: string;
+  category: string;
+  readTime: string;
+}

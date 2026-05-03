@@ -11,7 +11,8 @@ import {
   LogOut,
   ShieldCheck,
   School,
-  Handshake
+  Handshake,
+  Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
@@ -23,10 +24,8 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
 
   const studentNavItems = [
     { icon: LayoutDashboard, label: 'Explore', path: '/dashboard' },
-    { icon: GraduationCap, label: 'Universities', path: '/dashboard/uni' },
-    { icon: Home, label: 'Accommodation', path: '/dashboard/accommodation' },
+    { icon: Layers, label: 'Services', path: '/dashboard/services' },
     { icon: FileText, label: 'My Progress', path: '/dashboard/applications' },
-    { icon: ShoppingBag, label: 'Marketplace', path: '/dashboard/market' }, 
     { icon: UserCircle, label: 'Profile & Docs', path: '/dashboard/profile' },
   ];
 

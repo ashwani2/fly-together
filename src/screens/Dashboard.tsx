@@ -8,7 +8,11 @@ import {
   GraduationCap, 
   CreditCard,
   UserCircle,
-  ShieldCheck
+  ShieldCheck,
+  Truck,
+  Home,
+  Banknote,
+  MapPin
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -17,6 +21,8 @@ import { Badge } from '@/components/ui/badge';
 import { mockStudent, mockNotifications } from '@/mockData';
 import { ApplicationStatus } from '@/types';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/AuthContext';
+import { Navigate, Link } from 'react-router-dom';
 
 const steps: { label: ApplicationStatus; icon: any }[] = [
   { label: 'Profile', icon: UserCircle },
@@ -26,8 +32,12 @@ const steps: { label: ApplicationStatus; icon: any }[] = [
   { label: 'Payment', icon: CreditCard },
 ];
 
-import { useAuth } from '@/lib/AuthContext';
-import { Navigate } from 'react-router-dom';
+const quickServices = [
+  { icon: GraduationCap, label: 'Universities', path: '/dashboard/uni', color: 'bg-indigo-500/10 text-indigo-500' },
+  { icon: Home, label: 'Accommodation', path: '/dashboard/accommodation', color: 'bg-emerald-500/10 text-emerald-500' },
+  { icon: Banknote, label: 'Loan Help', path: '/dashboard/loan-application', color: 'bg-blue-500/10 text-blue-500' },
+  { icon: Truck, label: 'Logistics', path: '/dashboard/market', color: 'bg-amber-500/10 text-amber-500' },
+];
 
 export default function Dashboard() {
   const { role, user } = useAuth();
@@ -94,6 +104,32 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Popular Services Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-tight">Essential Services</h2>
+          <Button variant="ghost" render={<Link to="/dashboard/services" />} className="text-primary hover:text-primary/80">
+            <span className="flex items-center gap-2">
+              View All Services <ArrowRight className="w-4 h-4" />
+            </span>
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {quickServices.map((service) => (
+            <Link key={service.label} to={service.path}>
+              <Card className="hover:border-primary transition-all duration-300 group cursor-pointer h-full">
+                <CardContent className="p-6 flex flex-col items-center justify-center text-center gap-3">
+                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110", service.color)}>
+                    <service.icon className="w-6 h-6" />
+                  </div>
+                  <span className="font-semibold text-sm">{service.label}</span>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Active Application */}

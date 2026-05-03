@@ -1,21 +1,25 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from './components/DashboardLayout';
-import LandingPage from './screens/LandingPage';
-import Dashboard from './screens/Dashboard';
-import Profile from './screens/Profile';
-import Universities from './screens/Universities';
-import Marketplace from './screens/Marketplace';
-import Accommodation from './screens/Accommodation';
-import Applications from './screens/Applications';
-import Admin from './screens/Admin';
-import AdminLogin from './screens/AdminLogin';
+
+const LandingPage = lazy(() => import('./screens/LandingPage'));
+const Dashboard = lazy(() => import('./screens/Dashboard'));
+const Profile = lazy(() => import('./screens/Profile'));
+const Universities = lazy(() => import('./screens/Universities'));
+const Marketplace = lazy(() => import('./screens/Marketplace'));
+const Accommodation = lazy(() => import('./screens/Accommodation'));
+const Services = lazy(() => import('./screens/Services'));
+const LoanApplication = lazy(() => import('./screens/LoanApplication'));
+const Applications = lazy(() => import('./screens/Applications'));
+const Admin = lazy(() => import('./screens/Admin'));
+const AdminLogin = lazy(() => import('./screens/AdminLogin'));
+const AdminAccommodations = lazy(() => import('./screens/AdminAccommodations'));
+const AdminPartners = lazy(() => import('./screens/AdminPartners'));
+const AdminUniversities = lazy(() => import('./screens/AdminUniversities'));
+const Blog = lazy(() => import('./screens/Blog'));
+
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
-
-import AdminAccommodations from './screens/AdminAccommodations';
-import AdminPartners from './screens/AdminPartners';
-import AdminUniversities from './screens/AdminUniversities';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'student' | 'admin' }) {
   const { user, role: userRole, loading } = useAuth();
@@ -24,12 +28,10 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 
   if (loading) return <div className="h-screen w-screen flex items-center justify-center">Loading...</div>;
   if (!user) return <Navigate to="/" />;
   
-  // If no specific role is required (general dashboard layout), but user is admin and not already on an admin path
   if (!role && userRole === 'admin' && !pathname.includes('/admin')) {
     return <Navigate to="/dashboard/admin" replace />;
   }
   
-  // Strict role check
   if (role && userRole !== role) {
     return <Navigate to={userRole === 'admin' ? "/dashboard/admin" : "/dashboard"} replace />;
   }
@@ -42,25 +44,30 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/admin-login" element={<AdminLogin />} />
-            <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-              <Route index element={<Dashboard />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="accommodation" element={<Accommodation />} />
-              <Route path="applications" element={<Applications />} />
-              <Route path="market" element={<Marketplace />} />
-              <Route path="uni" element={<Universities />} />
-              {/* Admin only routes */}
-              <Route path="admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
-              <Route path="admin/universities" element={<ProtectedRoute role="admin"><AdminUniversities /></ProtectedRoute>} />
-              <Route path="admin/accommodations" element={<ProtectedRoute role="admin"><AdminAccommodations /></ProtectedRoute>} />
-              <Route path="admin/partners" element={<ProtectedRoute role="admin"><AdminPartners /></ProtectedRoute>} />
-            </Route>
-          </Routes>
+          <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center">Loading...</div>}>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/admin-login" element={<AdminLogin />} />
+              <Route path="/blog" element={<Blog />} />
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+                <Route index element={<Dashboard />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="services" element={<Services />} />
+                <Route path="loan-application" element={<LoanApplication />} />
+                <Route path="accommodation" element={<Accommodation />} />
+                <Route path="applications" element={<Applications />} />
+                <Route path="market" element={<Marketplace />} />
+                <Route path="uni" element={<Universities />} />
+                <Route path="admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
+                <Route path="admin/universities" element={<ProtectedRoute role="admin"><AdminUniversities /></ProtectedRoute>} />
+                <Route path="admin/accommodations" element={<ProtectedRoute role="admin"><AdminAccommodations /></ProtectedRoute>} />
+                <Route path="admin/partners" element={<ProtectedRoute role="admin"><AdminPartners /></ProtectedRoute>} />
+              </Route>
+            </Routes>
+          </Suspense>
         </Router>
       </AuthProvider>
     </ThemeProvider>
   );
 }
+

@@ -51,12 +51,12 @@ export default function AdminUniversities() {
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
+          <DialogTrigger render={
             <Button className="gap-2">
               <Plus className="w-4 h-4" />
               Add University
             </Button>
-          </DialogTrigger>
+          } />
           <DialogContent>
             <form onSubmit={handleAddUni}>
               <DialogHeader>
