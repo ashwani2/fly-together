@@ -8,7 +8,7 @@ export const mockBlogPosts: BlogPost[] = [
     slug: 'top-5-uk-universities-2024',
     excerpt: 'Explore the best picks for academic excellence, student life, and career prospects in the United Kingdom this year.',
     content: 'Choosing the right university is a pivotal decision... (full content here)',
-    coverImage: 'https://images.unsplash.com/photo-1541339907198-e08756eaa539?auto=format&fit=crop&q=80&w=1200',
+    coverImage: 'https://images.pexels.com/photos/32752097/pexels-photo-32752097.jpeg',
     author: 'UniFlow Editorial',
     date: '2024-03-25',
     category: 'Education',
