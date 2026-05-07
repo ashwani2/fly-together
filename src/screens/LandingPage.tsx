@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Quote,
-  Video
+  Video,
+  Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -179,6 +180,39 @@ export default function LandingPage() {
               <p className="text-xl text-muted-foreground max-w-lg">
                 We provide comprehensive and personalized support to students seeking to further their education and pursue their career goals worldwide.
               </p>
+
+              {/* Search Bar */}
+              <motion.form 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const query = formData.get('query');
+                  if (query) {
+                    navigate(`/search?q=${encodeURIComponent(query.toString())}`);
+                  }
+                }}
+                className="relative max-w-xl group"
+              >
+                <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-xl group-focus-within:bg-primary/30 transition-all" />
+                <div className="relative flex p-2 bg-card border border-border shadow-2xl rounded-2xl">
+                  <div className="flex-1 flex items-center px-4">
+                    <Search className="w-5 h-5 text-muted-foreground mr-3" />
+                    <input 
+                      name="query"
+                      type="text" 
+                      placeholder="Search for Artificial Intelligence, Business..." 
+                      className="w-full bg-transparent border-none focus:ring-0 text-foreground placeholder:text-muted-foreground/60 h-12"
+                    />
+                  </div>
+                  <Button type="submit" size="lg" className="rounded-xl px-8 h-12 font-bold shadow-lg shadow-primary/20">
+                    Find Universities
+                  </Button>
+                </div>
+              </motion.form>
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button 
                   onClick={handleConnect}

@@ -17,6 +17,7 @@ const AdminAccommodations = lazy(() => import('./screens/AdminAccommodations'));
 const AdminPartners = lazy(() => import('./screens/AdminPartners'));
 const AdminUniversities = lazy(() => import('./screens/AdminUniversities'));
 const Blog = lazy(() => import('./screens/Blog'));
+const SearchResults = lazy(() => import('./screens/SearchResults'));
 
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
@@ -49,6 +50,7 @@ export default function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/admin-login" element={<AdminLogin />} />
               <Route path="/blog" element={<Blog />} />
+              <Route path="/search" element={<SearchResults />} />
               <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
                 <Route index element={<Dashboard />} />
                 <Route path="profile" element={<Profile />} />
