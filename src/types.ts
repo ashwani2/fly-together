@@ -72,3 +72,10 @@ export interface BlogPost {
   category: string;
   readTime: string;
 }
+
+export interface HomePartner {
+  id: string;
+  name: string;
+  logo: string;
+  redirectUrl: string;
+}

@@ -1,0 +1,192 @@
+
+import React, { useState, useEffect } from 'react';
+import { 
+  Plus, 
+  Trash2, 
+  Eye, 
+  ExternalLink,
+  Handshake
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { HomePartner } from '@/types';
+import { mockHomePartners } from '@/mockData';
+
+export default function AdminHomePartners() {
+  const [partnerList, setPartnerList] = useState<HomePartner[]>(() => {
+    const saved = localStorage.getItem('home_partners');
+    return saved ? JSON.parse(saved) : mockHomePartners;
+  });
+  const [isPartnerDialogOpen, setIsPartnerDialogOpen] = useState(false);
+  const [editingPartner, setEditingPartner] = useState<HomePartner | null>(null);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const savedPartners = localStorage.getItem('home_partners');
+      if (savedPartners) {
+        setPartnerList(JSON.parse(savedPartners));
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const savePartners = (newList: HomePartner[]) => {
+    setPartnerList(newList);
+    localStorage.setItem('home_partners', JSON.stringify(newList));
+  };
+
+  const handleAddEditPartner = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const data: Partial<HomePartner> = {
+      name: formData.get('name') as string,
+      logo: formData.get('logo') as string,
+      redirectUrl: formData.get('redirectUrl') as string,
+    };
+
+    if (editingPartner) {
+      const newList = partnerList.map(p => p.id === editingPartner.id ? { ...editingPartner, ...data } : p);
+      savePartners(newList);
+    } else {
+      const newPartner: HomePartner = {
+        id: `hp-${Date.now()}`,
+        ...(data as Omit<HomePartner, 'id'>)
+      };
+      savePartners([...partnerList, newPartner]);
+    }
+    setIsPartnerDialogOpen(false);
+    setEditingPartner(null);
+  };
+
+  const handleDeletePartner = (id: string) => {
+    if (confirm('Are you sure you want to delete this partner?')) {
+      savePartners(partnerList.filter(p => p.id !== id));
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">Home Marquee Partners</h1>
+        <p className="text-muted-foreground">Manage partners and clients that appear in the home page marquee.</p>
+      </div>
+
+      <Card className="border-none shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b bg-muted/20">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle>Partner Network</CardTitle>
+              <CardDescription>Add partners with their logos and redirection links (Newsletters/Certificates).</CardDescription>
+            </div>
+            <Dialog open={isPartnerDialogOpen} onOpenChange={(open) => {
+              setIsPartnerDialogOpen(open);
+              if (!open) setEditingPartner(null);
+            }}>
+              <DialogTrigger render={
+                <Button className="gap-2">
+                  <Plus className="w-4 h-4" /> Add Partner
+                </Button>
+              } />
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>{editingPartner ? 'Edit Partner' : 'Add New Partner'}</DialogTitle>
+                  <DialogDescription>
+                    Provide partner name, logo URL and the redirection link.
+                  </DialogDescription>
+                </DialogHeader>
+                <form key={editingPartner?.id || 'new-partner-form'} onSubmit={handleAddEditPartner} className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Partner Name</label>
+                    <Input name="name" defaultValue={editingPartner?.name} required placeholder="e.g. Global Education" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Logo URL</label>
+                    <Input name="logo" defaultValue={editingPartner?.logo} required placeholder="https://logo.clearbit.com/..." />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Redirection URL (Newsletter/Cert)</label>
+                    <Input name="redirectUrl" defaultValue={editingPartner?.redirectUrl} required placeholder="https://..." />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setIsPartnerDialogOpen(false)}>Cancel</Button>
+                    <Button type="submit">{editingPartner ? 'Update Partner' : 'Save Partner'}</Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-muted/10">
+              <TableRow>
+                <TableHead className="px-6">Partner</TableHead>
+                <TableHead>Redirection Link</TableHead>
+                <TableHead className="text-right px-6">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {partnerList.map((partner) => (
+                <TableRow key={partner.id}>
+                  <TableCell className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded border bg-white p-1 flex items-center justify-center">
+                        <img src={partner.logo} alt={partner.name} className="max-w-full max-h-full object-contain" />
+                      </div>
+                      <span className="font-semibold text-sm">{partner.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <a href={partner.redirectUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                      {partner.redirectUrl} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </TableCell>
+                  <TableCell className="text-right px-6">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={() => {
+                          setEditingPartner(partner);
+                          setIsPartnerDialogOpen(true);
+                        }}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDeletePartner(partner.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

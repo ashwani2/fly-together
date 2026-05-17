@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   School,
   Handshake,
-  Layers
+  Layers,
+  Banknote,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
@@ -29,14 +31,35 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
     { icon: UserCircle, label: 'Profile & Docs', path: '/dashboard/profile' },
   ];
 
-  const adminNavItems = [
-    { icon: ShieldCheck, label: 'Applications', path: '/dashboard/admin' },
-    { icon: School, label: 'Universities', path: '/dashboard/admin/universities' },
-    { icon: Home, label: 'Accommodations', path: '/dashboard/admin/accommodations' },
-    { icon: Handshake, label: 'Partners', path: '/dashboard/admin/partners' },
+  const adminSections = [
+    {
+      title: 'Main',
+      items: [
+        { icon: ShieldCheck, label: 'Applications', path: '/dashboard/admin' },
+      ]
+    },
+    {
+      title: 'Services',
+      items: [
+        { icon: Home, label: 'Accommodations', path: '/dashboard/admin/accommodations' },
+        { icon: Handshake, label: 'Partners', path: '/dashboard/admin/partners' },
+        { icon: Banknote, label: 'Loan Apps', path: '/dashboard/admin/loans' },
+      ]
+    },
+    {
+      title: 'Configure Home Page',
+      items: [
+        { icon: MessageSquare, label: 'Testimonials', path: '/dashboard/admin/testimonials' },
+        { icon: FileText, label: 'Blogs', path: '/dashboard/admin/blogs' },
+        { icon: Handshake, label: 'Home Partners', path: '/dashboard/admin/home-partners' },
+      ]
+    }
   ];
 
-  const filteredNavItems = role === 'admin' ? adminNavItems : studentNavItems;
+  const agentNavItems = [
+    { icon: LayoutDashboard, label: 'My Students', path: '/dashboard/agent' },
+    { icon: ShieldCheck, label: 'Verifications', path: '/dashboard/agent/verifications' },
+  ];
 
   const handleLogout = async () => {
     await logout();
@@ -52,23 +75,53 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
         <span className="font-bold text-xl tracking-tight">Fly Together</span>
       </Link>
       
-      <nav className="flex-1 px-4 space-y-1 mt-4">
-        {filteredNavItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === '/dashboard' || item.path === '/dashboard/admin'}
-            className={({ isActive }) => cn(
-              "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-              isActive 
-                ? "bg-primary text-primary-foreground shadow-sm" 
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-          >
-            <item.icon className="w-5 h-5" />
-            {item.label}
-          </NavLink>
-        ))}
+      <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+        {role === 'admin' ? (
+          <div className="space-y-6">
+            {adminSections.map((section) => (
+              <div key={section.title} className="space-y-2">
+                <p className="px-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">
+                  {section.title}
+                </p>
+                <div className="space-y-1">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      end={item.path === '/dashboard/admin'}
+                      className={({ isActive }) => cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                        isActive 
+                          ? "bg-primary text-primary-foreground shadow-sm" 
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          (role === 'agent' ? agentNavItems : studentNavItems).map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.path === '/dashboard' || item.path === '/dashboard/agent'}
+              className={({ isActive }) => cn(
+                "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                isActive 
+                  ? "bg-primary text-primary-foreground shadow-sm" 
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <item.icon className="w-5 h-5" />
+              {item.label}
+            </NavLink>
+          ))
+        )}
       </nav>
 
       <div className="p-4 border-t space-y-1">

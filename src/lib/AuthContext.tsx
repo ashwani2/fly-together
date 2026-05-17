@@ -5,17 +5,18 @@ import { auth, db } from './firebase';
 
 interface AuthContextType {
   user: User | null;
-  role: 'student' | 'admin' | null;
+  role: 'student' | 'admin' | 'agent' | null;
   loading: boolean;
   loginAsDummy?: () => void;
   loginAsAdminDummy?: (email: string) => void;
+  loginAsAgentDummy?: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({ user: null, role: null, loading: true });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<'student' | 'admin' | null>(null);
+  const [role, setRole] = useState<'student' | 'admin' | 'agent' | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loginAsDummy = () => {
@@ -42,14 +43,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('dummyAdmin', JSON.stringify(dummyAdmin));
   };
 
+  const loginAsAgentDummy = () => {
+    const dummyAgent = {
+      uid: 'dummy-agent-id',
+      email: 'agent@example.com',
+      displayName: 'Premium Agent',
+      photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=agent',
+    };
+    setUser(dummyAgent as any);
+    setRole('agent');
+    localStorage.setItem('dummyAgent', JSON.stringify(dummyAgent));
+  };
+
   useEffect(() => {
     try {
       const savedDummy = localStorage.getItem('dummyUser');
       const savedAdmin = localStorage.getItem('dummyAdmin');
+      const savedAgent = localStorage.getItem('dummyAgent');
 
       if (savedAdmin) {
         setUser(JSON.parse(savedAdmin));
         setRole('admin');
+        setLoading(false);
+        return;
+      }
+
+      if (savedAgent) {
+        setUser(JSON.parse(savedAgent));
+        setRole('agent');
         setLoading(false);
         return;
       }
@@ -64,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to parse saved user from localStorage', e);
       localStorage.removeItem('dummyUser');
       localStorage.removeItem('dummyAdmin');
+      localStorage.removeItem('dummyAgent');
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -107,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, loginAsDummy, loginAsAdminDummy }}>
+    <AuthContext.Provider value={{ user, role, loading, loginAsDummy, loginAsAdminDummy, loginAsAgentDummy }}>
       {children}
     </AuthContext.Provider>
   );

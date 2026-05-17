@@ -16,13 +16,18 @@ const AdminLogin = lazy(() => import('./screens/AdminLogin'));
 const AdminAccommodations = lazy(() => import('./screens/AdminAccommodations'));
 const AdminPartners = lazy(() => import('./screens/AdminPartners'));
 const AdminUniversities = lazy(() => import('./screens/AdminUniversities'));
+const AdminLoans = lazy(() => import('./screens/AdminLoans'));
+const AdminTestimonials = lazy(() => import('./screens/AdminTestimonials'));
+const AdminBlogs = lazy(() => import('./screens/AdminBlogs'));
+const AdminHomePartners = lazy(() => import('./screens/AdminHomePartners'));
 const Blog = lazy(() => import('./screens/Blog'));
 const SearchResults = lazy(() => import('./screens/SearchResults'));
+const Agent = lazy(() => import('./screens/Agent'));
 
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
 
-function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'student' | 'admin' }) {
+function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'student' | 'admin' | 'agent' }) {
   const { user, role: userRole, loading } = useAuth();
   const { pathname } = useLocation();
 
@@ -32,9 +37,15 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 
   if (!role && userRole === 'admin' && !pathname.includes('/admin')) {
     return <Navigate to="/dashboard/admin" replace />;
   }
+
+  if (!role && userRole === 'agent' && !pathname.includes('/agent')) {
+    return <Navigate to="/dashboard/agent" replace />;
+  }
   
   if (role && userRole !== role) {
-    return <Navigate to={userRole === 'admin' ? "/dashboard/admin" : "/dashboard"} replace />;
+    if (userRole === 'admin') return <Navigate to="/dashboard/admin" replace />;
+    if (userRole === 'agent') return <Navigate to="/dashboard/agent" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -61,9 +72,15 @@ export default function App() {
                 <Route path="market" element={<Marketplace />} />
                 <Route path="uni" element={<Universities />} />
                 <Route path="admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
+                <Route path="admin/loans" element={<ProtectedRoute role="admin"><AdminLoans /></ProtectedRoute>} />
+                <Route path="admin/testimonials" element={<ProtectedRoute role="admin"><AdminTestimonials /></ProtectedRoute>} />
+                <Route path="admin/blogs" element={<ProtectedRoute role="admin"><AdminBlogs /></ProtectedRoute>} />
+                <Route path="admin/home-partners" element={<ProtectedRoute role="admin"><AdminHomePartners /></ProtectedRoute>} />
                 <Route path="admin/universities" element={<ProtectedRoute role="admin"><AdminUniversities /></ProtectedRoute>} />
                 <Route path="admin/accommodations" element={<ProtectedRoute role="admin"><AdminAccommodations /></ProtectedRoute>} />
                 <Route path="admin/partners" element={<ProtectedRoute role="admin"><AdminPartners /></ProtectedRoute>} />
+                <Route path="agent" element={<ProtectedRoute role="agent"><Agent /></ProtectedRoute>} />
+                <Route path="agent/verifications" element={<ProtectedRoute role="agent"><Agent /></ProtectedRoute>} />
               </Route>
             </Routes>
           </Suspense>

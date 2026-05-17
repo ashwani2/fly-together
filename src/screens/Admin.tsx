@@ -1,31 +1,24 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Users, 
-  FileCheck, 
   TrendingUp, 
   Search, 
-  Filter, 
   CheckCircle2,
-  XCircle,
   Eye,
-  DollarSign,
-  ChevronDown,
   ShieldCheck,
   FileText as FileIcon, 
-  Download, 
-  ExternalLink,
   Truck, 
   Home, 
   GraduationCap, 
-  Banknote, 
   Clock,
-  MessageSquare,
   Plus,
   Trash2,
-  Image as ImageIcon,
-  Video,
-  FileText
+  FileCheck,
+  DollarSign,
+  Filter,
+  ChevronDown,
+  XCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -42,6 +35,7 @@ import {
 import { 
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -51,8 +45,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from '@/lib/utils';
-import { Testimonial, BlogPost } from '@/types';
-import { mockTestimonials, mockBlogPosts } from '@/mockData';
 import { 
   Dialog,
   DialogContent,
@@ -63,11 +55,17 @@ import {
 } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-const students = [
-  { id: '1', name: 'Alex Johnson', university: 'Oxford', status: 'Verification', progress: 65, date: '2024-03-20' },
-  { id: '2', name: 'Maria Garcia', university: 'Imperial', status: 'Application', progress: 80, date: '2024-03-18' },
-  { id: '3', name: 'Chen Wei', university: 'Manchester', status: 'Documents', progress: 40, date: '2024-03-22' },
-  { id: '4', name: 'Sarah Miller', university: 'UCL', status: 'Payment', progress: 95, date: '2024-03-15' },
+const mockAgents = [
+  { id: 'agent-1', name: 'James Wilson', email: 'james@agent.com', studentsCount: 12 },
+  { id: 'agent-2', name: 'Sarah Parker', email: 'sarah@agent.com', studentsCount: 8 },
+  { id: 'agent-3', name: 'Michael Ross', email: 'michael@agent.com', studentsCount: 15 },
+];
+
+const initialStudents = [
+  { id: '1', name: 'Alex Johnson', university: 'Oxford', status: 'Verification', progress: 65, date: '2024-03-20', agentId: 'agent-1' },
+  { id: '2', name: 'Maria Garcia', university: 'Imperial', status: 'Application', progress: 80, date: '2024-03-18', agentId: 'agent-2' },
+  { id: '3', name: 'Chen Wei', university: 'Manchester', status: 'Documents', progress: 40, date: '2024-03-22', agentId: null },
+  { id: '4', name: 'Sarah Miller', university: 'UCL', status: 'Payment', progress: 95, date: '2024-03-15', agentId: 'agent-1' },
 ];
 
 const partners = [
@@ -136,120 +134,15 @@ const docCategories = [
 ];
 
 export default function Admin() {
-  const [studentList, setStudentList] = useState(students);
-  const [loanList, setLoanList] = useState(() => {
-    const saved = JSON.parse(localStorage.getItem('loan_applications') || '[]');
-    return [...mockLoanApps, ...saved];
-  });
+  const [studentList, setStudentList] = useState(initialStudents);
+  const [agents, setAgents] = useState(mockAgents);
+  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<any>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [selectedLoan, setSelectedLoan] = useState<any>(null);
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const [testimonialList, setTestimonialList] = useState<Testimonial[]>(() => {
-    const saved = localStorage.getItem('testimonials');
-    return saved ? JSON.parse(saved) : mockTestimonials;
-  });
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem('blog_posts');
-    return saved ? JSON.parse(saved) : mockBlogPosts;
-  });
-  const [isTestimonialDialogOpen, setIsTestimonialDialogOpen] = useState(false);
-  const [isBlogDialogOpen, setIsBlogDialogOpen] = useState(false);
-  const [editingTestimonial, setEditingTestimonial] = useState<Testimonial | null>(null);
-  const [editingBlog, setEditingBlog] = useState<BlogPost | null>(null);
-
-  // Sync with localStorage
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const savedLoans = JSON.parse(localStorage.getItem('loan_applications') || '[]');
-      setLoanList([...mockLoanApps, ...savedLoans]);
-
-      const savedTestimonials = localStorage.getItem('testimonials');
-      if (savedTestimonials) {
-        setTestimonialList(JSON.parse(savedTestimonials));
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const saveTestimonials = (newList: Testimonial[]) => {
-    setTestimonialList(newList);
-    localStorage.setItem('testimonials', JSON.stringify(newList));
-  };
-
-  const handleAddEditTestimonial = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data: Partial<Testimonial> = {
-      studentName: formData.get('studentName') as string,
-      universityName: formData.get('universityName') as string,
-      content: formData.get('content') as string,
-      mediaUrl: formData.get('mediaUrl') as string,
-      mediaType: formData.get('mediaType') as 'image' | 'video',
-      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.get('studentName')}`,
-      date: new Date().toISOString().split('T')[0],
-    };
-
-    if (editingTestimonial) {
-      const newList = testimonialList.map(t => t.id === editingTestimonial.id ? { ...editingTestimonial, ...data } : t);
-      saveTestimonials(newList);
-    } else {
-      const newTestimonial: Testimonial = {
-        id: `t-${Date.now()}`,
-        ...(data as Omit<Testimonial, 'id'>)
-      };
-      saveTestimonials([...testimonialList, newTestimonial]);
-    }
-    setIsTestimonialDialogOpen(false);
-    setEditingTestimonial(null);
-  };
-
-  const handleDeleteTestimonial = (id: string) => {
-    if (confirm('Are you sure you want to delete this testimonial?')) {
-      saveTestimonials(testimonialList.filter(t => t.id !== id));
-    }
-  };
-
-  const saveBlogs = (newList: BlogPost[]) => {
-    setBlogPosts(newList);
-    localStorage.setItem('blog_posts', JSON.stringify(newList));
-  };
-
-  const handleAddEditBlog = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const title = formData.get('title') as string;
-    const data: Partial<BlogPost> = {
-      title,
-      slug: title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, ''),
-      excerpt: formData.get('excerpt') as string,
-      content: formData.get('content') as string,
-      coverImage: formData.get('coverImage') as string,
-      category: formData.get('category') as string,
-      author: 'Admin',
-      date: new Date().toISOString().split('T')[0],
-      readTime: '5 min read'
-    };
-
-    if (editingBlog) {
-      const newList = blogPosts.map(b => b.id === editingBlog.id ? { ...editingBlog, ...data } : b);
-      saveBlogs(newList);
-    } else {
-      const newBlog: BlogPost = {
-        id: `b-${Date.now()}`,
-        ...(data as Omit<BlogPost, 'id'>)
-      };
-      saveBlogs([...blogPosts, newBlog]);
-    }
-    setIsBlogDialogOpen(false);
-    setEditingBlog(null);
-  };
-
-  const handleDeleteBlog = (id: string) => {
-    if (confirm('Are you sure you want to delete this blog post?')) {
-      saveBlogs(blogPosts.filter(b => b.id !== id));
-    }
-  };
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [isStudentDetailsOpen, setIsStudentDetailsOpen] = useState(false);
 
   const handleApprove = (id: string) => {
     setStudentList(prev => prev.map(s => s.id === id ? { ...s, status: 'Application', progress: 85 } : s));
@@ -257,6 +150,39 @@ export default function Admin() {
 
   const handleReject = (id: string) => {
     setStudentList(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleAddEditAgent = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      name: formData.get('name') as string,
+      email: formData.get('email') as string,
+    };
+
+    if (editingAgent) {
+      setAgents(prev => prev.map(a => a.id === editingAgent.id ? { ...a, ...data } : a));
+    } else {
+      const newAgent = {
+        id: `agent-${Date.now()}`,
+        ...data,
+        studentsCount: 0
+      };
+      setAgents(prev => [...prev, newAgent]);
+    }
+    setIsAgentDialogOpen(false);
+    setEditingAgent(null);
+  };
+
+  const handleDeleteAgent = (id: string) => {
+    if (confirm('Are you sure you want to delete this agent?')) {
+      setAgents(prev => prev.filter(a => a.id !== id));
+      setStudentList(prev => prev.map(s => s.agentId === id ? { ...s, agentId: null } : s));
+    }
+  };
+
+  const handleAssignAgent = (studentId: string, agentId: string) => {
+    setStudentList(prev => prev.map(s => s.id === studentId ? { ...s, agentId: agentId === 'unassigned' ? null : agentId } : s));
   };
 
   const filteredStudents = studentList.filter(s => {
@@ -268,12 +194,6 @@ export default function Admin() {
 
   const [applicantDocs, setApplicantDocs] = useState(docCategories);
 
-  const updateDocStatus = (catIdx: number, itemIdx: number, newStatus: string) => {
-    const newDocs = [...applicantDocs];
-    newDocs[catIdx].items[itemIdx].status = newStatus;
-    setApplicantDocs(newDocs);
-  };
-
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -283,7 +203,6 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {adminStats.map((stat) => (
           <Card key={stat.label} className="border-none shadow-sm bg-card/50 backdrop-blur group hover:shadow-md transition-all">
@@ -305,24 +224,14 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* Main Content Area */}
       <Tabs defaultValue="students" className="space-y-6">
         <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
           <TabsList className="bg-muted/50 p-1 inline-flex w-auto md:w-full justify-start md:justify-center min-w-max">
             <TabsTrigger value="students" className="gap-2">
               <Users className="w-4 h-4" /> Admission Queue
             </TabsTrigger>
-            <TabsTrigger value="loans" className="gap-2">
-              <Banknote className="w-4 h-4" /> Loan Applications
-            </TabsTrigger>
-            <TabsTrigger value="testimonials" className="gap-2">
-              <MessageSquare className="w-4 h-4" /> Testimonials
-            </TabsTrigger>
-            <TabsTrigger value="blogs" className="gap-2">
-              <FileText className="w-4 h-4" /> Blogs
-            </TabsTrigger>
-            <TabsTrigger value="partners" className="gap-2 text-muted-foreground/60" disabled>
-              <ShieldCheck className="w-4 h-4" /> Partners
+            <TabsTrigger value="agents" className="gap-2">
+              <ShieldCheck className="w-4 h-4" /> Agent Network
             </TabsTrigger>
           </TabsList>
         </div>
@@ -356,15 +265,17 @@ export default function Admin() {
                       }
                     />
                     <DropdownMenuContent align="end" className="w-[180px]">
-                      <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuRadioGroup value={statusFilter} onValueChange={setStatusFilter}>
-                        <DropdownMenuRadioItem value="All">All Statuses</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="Verification">Verification</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="Application">Application</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="Documents">Documents</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="Payment">Payment</DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup value={statusFilter} onValueChange={setStatusFilter}>
+                          <DropdownMenuRadioItem value="All">All Statuses</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="Verification">Verification</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="Application">Application</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="Documents">Documents</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="Payment">Payment</DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -376,84 +287,127 @@ export default function Admin() {
                   <TableHeader className="bg-muted/10">
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[280px] px-6 text-center">Student Details</TableHead>
-                      <TableHead className="text-center">Target Institution</TableHead>
-                      <TableHead className="text-center">Current Phase</TableHead>
+                      <TableHead className="text-center">Agent</TableHead>
+                      <TableHead className="text-center">Phase</TableHead>
                       <TableHead className="text-center">Progress</TableHead>
-                      <TableHead className="text-center">Last Activity</TableHead>
                       <TableHead className="text-right px-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredStudents.length > 0 ? (
-                      filteredStudents.map((student) => (
-                        <TableRow key={student.id} className="group">
-                          <TableCell className="font-medium px-6 py-4">
-                            <div className="flex items-center justify-center gap-3">
-                              <Avatar className="w-9 h-9 border-2 border-background shadow-sm">
-                                <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`} />
-                                <AvatarFallback>{student.name[0]}</AvatarFallback>
-                              </Avatar>
-                              <div className="flex flex-col items-start text-left">
-                                <span className="text-sm font-semibold">{student.name}</span>
-                                <span className="text-[10px] text-muted-foreground font-normal">ID: {student.id}9823</span>
+                      filteredStudents.map((student) => {
+                        const assignedAgent = agents.find(a => a.id === student.agentId);
+                        
+                        return (
+                          <TableRow key={student.id} className="group">
+                            <TableCell className="font-medium px-6 py-4">
+                              <div className="flex items-center justify-center gap-3">
+                                <Avatar className="w-9 h-9 border-2 border-background shadow-sm">
+                                  <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`} />
+                                  <AvatarFallback>{student.name[0]}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col items-start text-left">
+                                  <span className="text-sm font-semibold">{student.name}</span>
+                                  <span className="text-[10px] text-muted-foreground font-normal">ID: {student.id}9823</span>
+                                </div>
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex flex-col">
-                              <span className="text-sm">{student.university}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono">ENROLLMENT-ID: 7420</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge 
-                              variant="secondary"
-                              className={cn(
-                                "px-2 py-0 h-5 font-medium text-[10px] uppercase tracking-wider",
-                                student.status === 'Verification' ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" :
-                                student.status === 'Application' ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" :
-                                student.status === 'Payment' ? "bg-green-500/10 text-green-500 hover:bg-green-500/20" :
-                                "bg-muted text-muted-foreground hover:bg-muted"
-                              )}
-                            >
-                              {student.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary transition-all duration-1000" 
-                                  style={{ width: `${student.progress}%` }} 
-                                />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger render={
+                                  <Button variant="ghost" size="sm" className={cn("h-8 gap-2 rounded-full", !assignedAgent && "text-red-500 bg-red-500/10")}>
+                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                    {assignedAgent ? assignedAgent.name : 'Unassigned'}
+                                    <ChevronDown className="w-3 h-3 opacity-50" />
+                                  </Button>
+                                } />
+                                <DropdownMenuContent align="center" className="w-[200px]">
+                                  <DropdownMenuGroup>
+                                    <DropdownMenuLabel>Assign Agent</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuRadioGroup 
+                                      value={student.agentId || 'unassigned'}
+                                      onValueChange={(val) => handleAssignAgent(student.id, val)}
+                                    >
+                                      {agents.map((agent) => (
+                                        <DropdownMenuRadioItem 
+                                          key={agent.id} 
+                                          value={agent.id}
+                                          className="text-xs"
+                                        >
+                                          {agent.name}
+                                        </DropdownMenuRadioItem>
+                                      ))}
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuRadioItem 
+                                        value="unassigned" 
+                                        className="text-xs text-destructive"
+                                      >
+                                        Unassign Agent
+                                      </DropdownMenuRadioItem>
+                                    </DropdownMenuRadioGroup>
+                                  </DropdownMenuGroup>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge 
+                                variant="secondary"
+                                className={cn(
+                                  "px-2 py-0 h-5 font-medium text-[10px] uppercase tracking-wider",
+                                  student.status === 'Verification' ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" :
+                                  student.status === 'Application' ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" :
+                                  student.status === 'Payment' ? "bg-green-500/10 text-green-500 hover:bg-green-500/20" :
+                                  "bg-muted text-muted-foreground hover:bg-muted"
+                                )}
+                              >
+                                {student.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-primary transition-all duration-1000" 
+                                    style={{ width: `${student.progress}%` }} 
+                                  />
+                                </div>
+                                <span className="text-[10px] font-mono font-medium text-muted-foreground">{student.progress}%</span>
                               </div>
-                              <span className="text-[10px] font-mono font-medium text-muted-foreground">{student.progress}%</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center text-muted-foreground text-xs font-mono">{student.date}</TableCell>
-                          <TableCell className="text-right px-6">
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10"
-                                onClick={() => handleApprove(student.id)}
-                                title="Approve"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
-                                onClick={() => handleReject(student.id)}
-                                title="Reject"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted" title="Details">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                            </TableCell>
+                            <TableCell className="text-right px-6">
+                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10"
+                                  onClick={() => handleApprove(student.id)}
+                                  title="Approve"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleReject(student.id)}
+                                  title="Reject"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-muted-foreground hover:bg-muted" 
+                                  title="Details"
+                                  onClick={() => {
+                                    setSelectedStudent(student);
+                                    setIsStudentDetailsOpen(true);
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     ) : (
                       <TableRow>
                         <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
@@ -468,310 +422,42 @@ export default function Admin() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="loans">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="pb-3 border-b bg-muted/20">
-              <CardTitle>Education Loan Requests</CardTitle>
-              <CardDescription>Review and process new loan inquiry forms from students.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/10">
-                    <TableRow>
-                      <TableHead className="px-6">Applicant</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Submission Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right px-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                  {loanList.length > 0 ? (
-                    loanList.map((loan) => (
-                      <TableRow key={loan.id} className="group">
-                        <TableCell className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold">{loan.applicantName}</span>
-                            <span className="text-xs text-muted-foreground">{loan.email}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] font-normal">{loan.type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{loan.date}</TableCell>
-                        <TableCell>
-                          <Badge 
-                            className={cn(
-                              "text-[10px] uppercase",
-                              loan.status === 'Pending' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"
-                            )}
-                          >
-                            {loan.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right px-6">
-                           <Button 
-                             variant="ghost" 
-                             size="sm" 
-                             className="h-8 gap-2"
-                             onClick={() => {
-                               setSelectedLoan(loan);
-                               setIsReviewOpen(true);
-                             }}
-                            >
-                             Review Docs <Eye className="w-3 h-3" />
-                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
-                        No loan applications found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="testimonials">
+        <TabsContent value="agents">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <CardTitle>Student Testimonials</CardTitle>
-                  <CardDescription>Manage stories and reviews shared by students on the homepage.</CardDescription>
+                  <CardTitle>Agent Network</CardTitle>
+                  <CardDescription>Onboard and manage agents who assist students with their applications.</CardDescription>
                 </div>
-                <Dialog open={isTestimonialDialogOpen} onOpenChange={(open) => {
-                  setIsTestimonialDialogOpen(open);
-                  if (!open) setEditingTestimonial(null);
+                <Dialog open={isAgentDialogOpen} onOpenChange={(open) => {
+                  setIsAgentDialogOpen(open);
+                  if (!open) setEditingAgent(null);
                 }}>
                   <DialogTrigger render={
                     <Button className="gap-2">
-                      <Plus className="w-4 h-4" /> Add Testimonial
+                      <Plus className="w-4 h-4" /> Onboard Agent
                     </Button>
                   } />
-                  <DialogContent className="sm:max-w-[500px]">
+                  <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                      <DialogTitle>{editingTestimonial ? 'Edit Testimonial' : 'Add New Testimonial'}</DialogTitle>
+                      <DialogTitle>{editingAgent ? 'Edit Agent Profile' : 'Onboard New Agent'}</DialogTitle>
                       <DialogDescription>
-                        Fill in student details and their story to feature on the homepage.
+                        Agents can bring their own students and help verify their documents.
                       </DialogDescription>
                     </DialogHeader>
-                    <form 
-                      key={editingTestimonial?.id || 'new-testimonial-form'} 
-                      onSubmit={handleAddEditTestimonial} 
-                      className="space-y-4 pt-4"
-                    >
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Student Name</label>
-                          <Input name="studentName" defaultValue={editingTestimonial?.studentName} required placeholder="e.g. John Doe" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">University</label>
-                          <Input name="universityName" defaultValue={editingTestimonial?.universityName} placeholder="e.g. Oxford" />
-                        </div>
+                    <form key={editingAgent?.id || 'new-agent-form'} onSubmit={handleAddEditAgent} className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Agent Name</label>
+                        <Input name="name" defaultValue={editingAgent?.name} required placeholder="Full Name" />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Testimony</label>
-                        <textarea 
-                          name="content" 
-                          defaultValue={editingTestimonial?.content}
-                          required 
-                          className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          placeholder="What did the student say?"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Media Type</label>
-                          <select 
-                            name="mediaType" 
-                            defaultValue={editingTestimonial?.mediaType || 'image'}
-                            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          >
-                            <option value="image">Image</option>
-                            <option value="video">Video</option>
-                          </select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Media URL</label>
-                          <Input name="mediaUrl" defaultValue={editingTestimonial?.mediaUrl} required placeholder="URL to image/video" />
-                        </div>
+                        <label className="text-sm font-medium">Email Address</label>
+                        <Input name="email" type="email" defaultValue={editingAgent?.email} required placeholder="agent@example.com" />
                       </div>
                       <div className="flex justify-end gap-3 pt-4">
-                        <Button type="button" variant="outline" onClick={() => setIsTestimonialDialogOpen(false)}>Cancel</Button>
-                        <Button type="submit">Save Testimonial</Button>
-                      </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/10">
-                    <TableRow>
-                      <TableHead className="px-6">Student</TableHead>
-                      <TableHead>Testimony</TableHead>
-                      <TableHead>Media</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right px-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                  {testimonialList.length > 0 ? (
-                    testimonialList.map((t) => (
-                      <TableRow key={t.id} className="group">
-                        <TableCell className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={t.avatarUrl} />
-                              <AvatarFallback>{t.studentName[0]}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-semibold">{t.studentName}</span>
-                              <span className="text-[10px] text-muted-foreground">{t.universityName}</span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-xs">
-                          <p className="text-xs line-clamp-2 text-muted-foreground">{t.content}</p>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {t.mediaType === 'image' ? (
-                              <ImageIcon className="w-3 h-3 text-blue-500" />
-                            ) : (
-                              <Video className="w-3 h-3 text-red-500" />
-                            )}
-                            <span className="text-[10px] truncate max-w-[100px]">{t.mediaUrl}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-[10px] font-mono">{t.date}</TableCell>
-                        <TableCell className="text-right px-6">
-                           <div className="flex justify-end gap-2">
-                             <Button 
-                               variant="ghost" 
-                               size="icon" 
-                               className="h-8 w-8"
-                               onClick={() => {
-                                 setEditingTestimonial(t);
-                                 setIsTestimonialDialogOpen(true);
-                               }}
-                             >
-                               <Eye className="w-4 h-4" />
-                             </Button>
-                             <Button 
-                               variant="ghost" 
-                               size="icon" 
-                               className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                               onClick={() => handleDeleteTestimonial(t.id)}
-                             >
-                               <Trash2 className="w-4 h-4" />
-                             </Button>
-                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
-                        No testimonials found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="blogs">
-          <Card className="border-none shadow-sm">
-            <CardHeader className="pb-3 border-b bg-muted/20">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <CardTitle>Manage Blog Posts</CardTitle>
-                  <CardDescription>Create and edit articles for the website blog section.</CardDescription>
-                </div>
-                <Dialog open={isBlogDialogOpen} onOpenChange={(open) => {
-                  setIsBlogDialogOpen(open);
-                  if (!open) setEditingBlog(null);
-                }}>
-                  <DialogTrigger render={
-                    <Button className="gap-2">
-                      <Plus className="w-4 h-4" /> New Post
-                    </Button>
-                  } />
-                  <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Add New Post</DialogTitle>
-                    </DialogHeader>
-                    <form key={editingBlog?.id || 'new-blog-form'} onSubmit={handleAddEditBlog} className="space-y-6 pt-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Post Title</label>
-                        <Input name="title" defaultValue={editingBlog?.title} required placeholder="e.g. 5 Web Design Trends to Watch in 2024" />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Category</label>
-                          <select name="category" defaultValue={editingBlog?.category || 'Education'} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
-                            <option>Education</option>
-                            <option>Finance</option>
-                            <option>Travel</option>
-                            <option>Student Life</option>
-                          </select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Cover Image URL</label>
-                          <Input name="coverImage" defaultValue={editingBlog?.coverImage} required placeholder="https://..." />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                         <label className="text-sm font-medium italic opacity-70">Permalink: yourwebsite.com/{editingBlog?.slug || 'post-title-here'}</label>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Excerpt (Short description)</label>
-                        <textarea 
-                          name="excerpt" 
-                          defaultValue={editingBlog?.excerpt}
-                          required 
-                          className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div className="space-y-2 border rounded-xl overflow-hidden">
-                        <div className="bg-muted/50 p-2 border-b flex gap-2">
-                           <Button type="button" variant="ghost" size="sm" className="h-8 font-bold">B</Button>
-                           <Button type="button" variant="ghost" size="sm" className="h-8 italic">I</Button>
-                           <Button type="button" variant="ghost" size="sm" className="h-8 underline">U</Button>
-                           <div className="w-px h-6 bg-border mx-1" />
-                           <Button type="button" variant="ghost" size="sm" className="h-8 gap-2"><ImageIcon className="w-4 h-4" /> Add Media</Button>
-                        </div>
-                        <textarea 
-                          name="content" 
-                          defaultValue={editingBlog?.content}
-                          required 
-                          placeholder="Write your story here..."
-                          className="flex min-h-[300px] w-full border-none bg-transparent px-3 py-2 text-sm focus-visible:outline-none"
-                        />
-                      </div>
-
-                      <div className="flex justify-end gap-3 pt-4">
-                        <Button type="button" variant="outline" onClick={() => setIsBlogDialogOpen(false)}>Cancel</Button>
-                        <Button type="submit">Publish Post</Button>
+                        <Button type="button" variant="outline" onClick={() => setIsAgentDialogOpen(false)}>Cancel</Button>
+                        <Button type="submit">{editingAgent ? 'Update Profile' : 'Onboard Agent'}</Button>
                       </div>
                     </form>
                   </DialogContent>
@@ -780,39 +466,54 @@ export default function Admin() {
             </CardHeader>
             <CardContent className="p-0">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/10">
                   <TableRow>
-                    <TableHead className="px-6">Article</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead className="px-6">Agent Details</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead className="text-center">Active Students</TableHead>
                     <TableHead className="text-right px-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {blogPosts.map((blog) => (
-                    <TableRow key={blog.id}>
+                  {agents.map((agent) => (
+                    <TableRow key={agent.id}>
                       <TableCell className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <img src={blog.coverImage} className="w-12 h-8 rounded object-cover border" />
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold truncate max-w-[200px]">{blog.title}</span>
-                            <span className="text-[10px] text-muted-foreground">{blog.author}</span>
-                          </div>
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agent.name}`} />
+                            <AvatarFallback>{agent.name[0]}</AvatarFallback>
+                          </Avatar>
+                          <span className="font-semibold text-sm">{agent.name}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{blog.category}</Badge>
+                      <TableCell className="text-sm text-muted-foreground">{agent.email}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="px-2 py-0.5">
+                          {studentList.filter(s => s.agentId === agent.id).length} Students
+                        </Badge>
                       </TableCell>
-                      <TableCell className="text-[10px] font-mono">{blog.date}</TableCell>
                       <TableCell className="text-right px-6">
-                         <div className="flex justify-end gap-2">
-                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingBlog(blog); setIsBlogDialogOpen(true); }}>
-                             <Eye className="w-4 h-4" />
-                           </Button>
-                           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteBlog(blog.id)}>
-                             <Trash2 className="w-4 h-4" />
-                           </Button>
-                         </div>
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setEditingAgent(agent);
+                              setIsAgentDialogOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDeleteAgent(agent.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -823,22 +524,21 @@ export default function Admin() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
+      <Dialog open={isStudentDetailsOpen} onOpenChange={setIsStudentDetailsOpen}>
         <DialogContent className="sm:max-w-5xl w-[98vw] h-[95vh] md:h-[85vh] bg-background/60 backdrop-blur-3xl border-white/10 shadow-2xl p-0 overflow-hidden flex flex-col gap-0 transition-all duration-500">
-          {/* Fixed Header */}
           <div className="flex-none p-6 border-b bg-background/40 backdrop-blur-xl">
             <DialogHeader>
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shadow-inner">
-                    <FileIcon className="w-6 h-6" />
+                    <Users className="w-6 h-6" />
                   </div>
                   <div className="flex flex-col items-start gap-1">
                     <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight">
-                      Document Verification
+                      Student Overview
                     </DialogTitle>
                     <DialogDescription className="text-sm md:text-base font-medium">
-                      Applicant: <span className="text-foreground">{selectedLoan?.applicantName}</span> • <span className="font-mono text-primary">{selectedLoan?.id}</span>
+                      Reviewing profile for <span className="text-foreground">{selectedStudent?.name}</span> • <span className="font-mono text-primary">ID: {selectedStudent?.id}9823</span>
                     </DialogDescription>
                   </div>
                 </div>
@@ -846,102 +546,98 @@ export default function Admin() {
             </DialogHeader>
           </div>
 
-          {/* Scrollable Body */}
-          <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
-            <div className="p-4 md:p-8 space-y-6">
-              <Accordion type="multiple" defaultValue={["item-0"]} className="w-full space-y-4">
-                {applicantDocs.map((category, catIdx) => (
-                  <AccordionItem key={catIdx} value={`item-${catIdx}`} className="border rounded-2xl px-4 bg-muted/20 overflow-hidden">
-                    <AccordionTrigger className="hover:no-underline py-5 text-left">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                          {catIdx + 1}
-                        </div>
-                        <span className="text-base font-bold">{category.title}</span>
-                        <Badge variant="outline" className="ml-2 text-[10px] h-5 bg-background font-mono">
-                          {category.items.length} Files
-                        </Badge>
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="md:col-span-1 space-y-6">
+                <Card className="border-none shadow-md overflow-hidden">
+                  <div className="h-32 bg-primary/10 relative">
+                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
+                      <Avatar className="w-24 h-24 border-4 border-background shadow-xl">
+                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedStudent?.name}`} />
+                        <AvatarFallback>{selectedStudent?.name?.[0]}</AvatarFallback>
+                      </Avatar>
+                    </div>
+                  </div>
+                  <div className="pt-12 pb-6 px-6 text-center">
+                    <h3 className="text-xl font-bold">{selectedStudent?.name}</h3>
+                    <p className="text-muted-foreground text-sm">{selectedStudent?.university}</p>
+                    <div className="mt-4">
+                      <Badge variant="secondary" className="capitalize">
+                        {selectedStudent?.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </Card>
+
+                <div className="space-y-4">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Assigned Agent</h4>
+                  {selectedStudent?.agentId ? (
+                    <div className="flex items-center gap-3 p-4 rounded-2xl bg-muted/30">
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agents.find(a => a.id === selectedStudent?.agentId)?.name}`} />
+                        <AvatarFallback>A</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">{agents.find(a => a.id === selectedStudent?.agentId)?.name}</span>
+                        <span className="text-[10px] text-muted-foreground">Premium Agent</span>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                        {category.items.map((item, itemIdx) => (
-                          <div key={itemIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl border bg-background/50 backdrop-blur-sm group hover:border-primary/40 transition-all gap-4">
-                            <div className="flex items-center gap-4 overflow-hidden">
-                              <div className="p-3 rounded-xl bg-muted/80 border border-border/50 group-hover:scale-110 transition-transform">
-                                <FileIcon className="w-5 h-5 text-primary" />
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-sm font-bold truncate leading-tight mb-1">{item.name}</span>
-                                <div className="flex items-center gap-2">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger render={
-                                      <button className={cn(
-                                        "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter transition-all outline-none",
-                                        item.status === 'Verified' ? "bg-green-500/20 text-green-500 border border-green-500/20" : 
-                                        item.status === 'Pending' ? "bg-amber-500/20 text-amber-500 border border-amber-500/20" : 
-                                        "bg-red-500/20 text-red-500 border border-red-500/20"
-                                      )}>
-                                        {item.status}
-                                        <ChevronDown className="w-2.5 h-2.5" />
-                                      </button>
-                                    } />
-                                    <DropdownMenuContent align="start" className="w-[140px]">
-                                      <DropdownMenuRadioGroup 
-                                        value={item.status} 
-                                        onValueChange={(val) => updateDocStatus(catIdx, itemIdx, val)}
-                                      >
-                                        <DropdownMenuRadioItem value="Verified" className="text-xs">Verified</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="Pending" className="text-xs">Pending</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="Needs Review" className="text-xs">Needs Review</DropdownMenuRadioItem>
-                                      </DropdownMenuRadioGroup>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                  <span className="text-[10px] text-muted-foreground opacity-30">|</span>
-                                  <span className="text-[10px] text-muted-foreground font-mono">PDF • 1.2MB</span>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2">
+                       <ShieldCheck className="w-4 h-4" /> No Agent Assigned
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-2 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold">Verification Progress</h3>
+                  <span className="text-sm font-mono font-bold text-primary">{selectedStudent?.progress}%</span>
+                </div>
+                <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${selectedStudent?.progress}%` }} />
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  <h3 className="text-lg font-bold">Documents Checklist</h3>
+                  <Accordion type="multiple" className="w-full space-y-3">
+                    {applicantDocs.map((category, catIdx) => (
+                      <AccordionItem key={catIdx} value={`student-cat-${catIdx}`} className="border rounded-xl px-4 bg-muted/10">
+                        <AccordionTrigger className="hover:no-underline py-3">
+                          <span className="font-bold text-sm">{category.title}</span>
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-3">
+                          <div className="grid gap-2">
+                            {category.items.map((item, itemIdx) => (
+                              <div key={itemIdx} className="flex items-center justify-between p-3 bg-background rounded-lg border border-border/50">
+                                <div className="flex items-center gap-3">
+                                  <FileIcon className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm">{item.name}</span>
                                 </div>
+                                <Badge variant={item.status === 'Verified' ? 'default' : 'secondary'} className="text-[10px]">
+                                  {item.status}
+                                </Badge>
                               </div>
-                            </div>
-                            <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-3 sm:pt-0">
-                               <div className="flex gap-2">
-                                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl bg-muted/50 hover:bg-primary/10 hover:text-primary transition-all">
-                                   <ExternalLink className="w-4 h-4" />
-                                 </Button>
-                                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl bg-muted/50 hover:bg-primary/10 hover:text-primary transition-all">
-                                   <Download className="w-4 h-4" />
-                                 </Button>
-                               </div>
-                               <button className="sm:hidden text-[10px] font-black tracking-widest text-primary bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20 uppercase transition-all active:scale-95">
-                                 View File
-                               </button>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Fixed Footer */}
-          <div className="flex-none p-4 md:p-6 border-t bg-background/60 backdrop-blur-xl">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-5xl mx-auto">
-              <div className="flex flex-col sm:flex-row lg:flex-row gap-2 w-full sm:w-auto">
-                <Button 
-                  variant="outline" 
-                  className="w-full sm:w-auto h-11 md:h-12 px-6 rounded-2xl border-white/20 bg-background/50 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 text-muted-foreground gap-2 transition-all font-bold text-sm"
-                >
-                  <XCircle className="w-5 h-5 text-destructive" /> Request Changes
-                </Button>
-                <Button 
-                  className="w-full sm:w-auto h-11 md:h-12 px-8 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 gap-2 font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <CheckCircle2 className="w-5 h-5" /> Approve Documents
-                </Button>
-              </div>
-            </div>
+          <div className="p-6 border-t bg-background/60 backdrop-blur-xl flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setIsStudentDetailsOpen(false)}>Close</Button>
+            <Button className="gap-2" onClick={() => {
+               handleApprove(selectedStudent.id);
+               setIsStudentDetailsOpen(false);
+            }}>
+              <CheckCircle2 className="w-4 h-4" /> Move to Next Phase
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

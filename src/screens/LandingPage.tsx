@@ -30,13 +30,13 @@ import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Moon, Sun, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { mockTestimonials } from '@/mockData';
-import { Testimonial } from '@/types';
+import { mockTestimonials, mockHomePartners } from '@/mockData';
+import { Testimonial, HomePartner } from '@/types';
 import { AnimatePresence } from 'motion/react';
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { loginAsDummy } = useAuth();
+  const { loginAsDummy, loginAsAgentDummy } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [testimonialList, setTestimonialList] = React.useState<Testimonial[]>(() => {
@@ -48,18 +48,33 @@ export default function LandingPage() {
       return mockTestimonials;
     }
   });
-  const [currentTestimonialIdx, setCurrentTestimonialIdx] = React.useState(0);
+  const [partnerList, setPartnerList] = React.useState<HomePartner[]>(() => {
+    try {
+      const saved = localStorage.getItem('home_partners');
+      return saved ? JSON.parse(saved) : mockHomePartners;
+    } catch (e) {
+      return mockHomePartners;
+    }
+  });
 
   React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem('testimonials');
-      if (saved) {
-        setTestimonialList(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.error('Failed to parse testimonials in useEffect', e);
-    }
+    const updateLists = () => {
+      try {
+        const savedT = localStorage.getItem('testimonials');
+        if (savedT) setTestimonialList(JSON.parse(savedT));
+        
+        const savedP = localStorage.getItem('home_partners');
+        if (savedP) setPartnerList(JSON.parse(savedP));
+      } catch (e) {}
+    };
+    updateLists();
+    
+    // Listen for storage changes (for admin updates in other tabs)
+    window.addEventListener('storage', updateLists);
+    return () => window.removeEventListener('storage', updateLists);
   }, []);
+
+  const [currentTestimonialIdx, setCurrentTestimonialIdx] = React.useState(0);
 
   // Auto-scroll logic
   React.useEffect(() => {
@@ -259,7 +274,7 @@ export default function LandingPage() {
                 />
               </div>
               {/* Floating Cards */}
-              <div className="absolute -top-6 -right-6 bg-card p-4 rounded-2xl shadow-xl z-20 flex items-center gap-3 border border-border animate-bounce-slow">
+              <div className="absolute -top-6 -right-6 bg-card p-4 rounded-2xl shadow-xl z-20 flex items-center gap-3 border border-border animate-float">
                 <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
@@ -268,7 +283,7 @@ export default function LandingPage() {
                   <p className="font-bold">99.2% Rate</p>
                 </div>
               </div>
-              <div className="absolute -bottom-6 -left-6 bg-card p-4 rounded-2xl shadow-xl z-20 flex items-center gap-3 border border-border animate-pulse-slow">
+              <div className="absolute -bottom-6 -left-6 bg-card p-4 rounded-2xl shadow-xl z-20 flex items-center gap-3 border border-border animate-float" style={{ animationDelay: '1.5s' }}>
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   <GraduationCap className="w-6 h-6" />
                 </div>
@@ -283,6 +298,35 @@ export default function LandingPage() {
         
         {/* Background Elements */}
         <div className="absolute top-0 right-0 w-1/2 h-full bg-primary/5 -skew-x-12 translate-x-1/4 -z-0" />
+      </section>
+
+      {/* Partners Marquee */}
+      <section className="py-10 bg-white border-y overflow-hidden">
+        <div className="container mx-auto px-4 mb-6">
+           <p className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-widest">Our Trusted Partners & Clients</p>
+        </div>
+        <div className="relative flex overflow-x-hidden">
+          <div className="animate-marquee flex items-center gap-12 whitespace-nowrap py-1">
+            {/* Double the list for seamless loop */}
+            {[...partnerList, ...partnerList].map((partner, i) => (
+              <a 
+                key={`${partner.id}-${i}`} 
+                href={partner.redirectUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-4 px-8 py-4 rounded-2xl hover:bg-muted/50 transition-all duration-300 group border border-transparent hover:border-border"
+                title={`View ${partner.name} Certificate/Newsletter`}
+              >
+                <div className="w-16 h-16 flex items-center justify-center p-3 bg-white rounded-2xl border shadow-sm group-hover:scale-105 group-hover:shadow-md transition-all duration-500 shrink-0">
+                  <img src={partner.logo} alt={partner.name} className="max-w-full max-h-full object-contain filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500" />
+                </div>
+                <span className="font-outfit font-bold text-2xl text-muted-foreground/30 group-hover:text-primary transition-all duration-300 tracking-tight">
+                  {partner.name}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Stats Section */}
@@ -540,6 +584,7 @@ export default function LandingPage() {
                 <li><a href="#services" className="hover:text-primary transition-colors">Our Services</a></li>
                 <li><a href="#about" className="hover:text-primary transition-colors">About Us</a></li>
                 <li><button onClick={handleConnect} className="hover:text-primary transition-colors cursor-pointer text-left">Student Portal</button></li>
+                <li><button onClick={() => { loginAsAgentDummy?.(); navigate('/dashboard/agent'); }} className="hover:text-amber-500 transition-colors cursor-pointer text-left">Agent Portal</button></li>
                 <li><Link to="/admin-login" className="hover:text-primary transition-colors text-slate-500">Admin Portal</Link></li>
               </ul>
             </div>
