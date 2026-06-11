@@ -5,8 +5,6 @@ export const mockHomePartners: HomePartner[] = [
   { id: 'hp1', name: 'Avila University', logo: 'https://universitysearch-jvqc.onrender.com/icons/Avila_university.png', redirectUrl: 'https://universitysearch-jvqc.onrender.com/pdfs/a5eTf000000IjhTIAS.pdf' },
   { id: 'hp2', name: 'The Language Gallery Canada', logo: 'https://universitysearch-jvqc.onrender.com/icons/the_language_gallery_canada.png', redirectUrl: 'https://universitysearch-jvqc.onrender.com/pdfs/Canada.pdf' },
   { id: 'hp3', name: 'BSBI Berlin', logo: 'https://universitysearch-jvqc.onrender.com/icons/school_of_business_innovation.png', redirectUrl: 'https://universitysearch-jvqc.onrender.com/pdfs/BSBI_SPAIN_MASTER_SLIDES.pdf' },
-  { id: 'hp4', name: 'Education Hub', logo: 'https://logo.clearbit.com/education.com', redirectUrl: '#' },
-  { id: 'hp5', name: 'Study Bridge', logo: 'https://logo.clearbit.com/study.com', redirectUrl: '#' },
 ];
 
 export const mockBlogPosts: BlogPost[] = [

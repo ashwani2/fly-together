@@ -20,6 +20,7 @@ import { BlogPost } from '@/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { SettingsDialog } from '@/components/SettingsDialog';
+import { Logo } from '@/components/Logo';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function Blog() {
@@ -50,11 +51,8 @@ export default function Blog() {
   const Navigation = () => (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 h-20 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-bold text-xl">
-            F
-          </div>
-          <span className="font-bold text-xl md:text-2xl tracking-tight text-primary">Let's Fly Together</span>
+        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
+          <Logo imgClassName="h-14 md:h-16" />
         </Link>
         <div className="hidden md:flex items-center gap-6">
           <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Home</Link>
@@ -123,10 +121,7 @@ export default function Blog() {
         <div className="grid md:grid-cols-4 gap-12 mb-16">
           <div className="space-y-6">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">
-                F
-              </div>
-              <span className="font-bold text-xl text-white">Let's Fly Together</span>
+              <Logo onDark imgClassName="h-12" />
             </div>
             <p className="text-sm leading-relaxed">
               We aim to provide comprehensive and personalized support to students seeking to further their education and pursue their career goals worldwide.

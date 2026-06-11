@@ -17,6 +17,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Logo } from '@/components/Logo';
 import { useAuth } from '@/lib/AuthContext';
 import { logout } from '@/lib/firebase';
 
@@ -68,11 +69,8 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
 
   return (
     <aside className={cn("w-64 border-r bg-card h-screen flex flex-col sticky top-0", className)}>
-      <Link to="/" className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity">
-        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-bold text-xl">
-          F
-        </div>
-        <span className="font-bold text-xl tracking-tight">Fly Together</span>
+      <Link to="/" className="p-5 flex items-center hover:opacity-80 transition-opacity">
+        <Logo imgClassName="h-12" />
       </Link>
       
       <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
