@@ -27,64 +27,100 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { BlogPost } from '@/types';
-import { mockBlogPosts } from '@/mockData';
+import { api } from '@/lib/api';
+import { swal } from '@/lib/swal';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const blogSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required'),
+  category: z.string().min(1),
+  coverImage: z.string().trim().min(1, 'Cover image URL is required'),
+  excerpt: z.string().trim().min(1, 'Excerpt is required'),
+  content: z.string().trim().min(1, 'Content is required'),
+});
+type BlogValues = z.infer<typeof blogSchema>;
+
+function FieldError({ msg }: { msg?: string }) {
+  return msg ? <p className="px-1 text-xs font-medium text-red-600">{msg}</p> : null;
+}
 
 export default function AdminBlogs() {
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem('blog_posts');
-    return saved ? JSON.parse(saved) : mockBlogPosts;
-  });
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [isBlogDialogOpen, setIsBlogDialogOpen] = useState(false);
   const [editingBlog, setEditingBlog] = useState<BlogPost | null>(null);
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<BlogValues>({
+    resolver: zodResolver(blogSchema),
+    defaultValues: { title: '', category: 'Education', coverImage: '', excerpt: '', content: '' },
+  });
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const savedBlogs = localStorage.getItem('blog_posts');
-      if (savedBlogs) {
-        setBlogPosts(JSON.parse(savedBlogs));
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isBlogDialogOpen) {
+      reset({
+        title: editingBlog?.title ?? '',
+        category: editingBlog?.category ?? 'Education',
+        coverImage: editingBlog?.coverImage ?? '',
+        excerpt: editingBlog?.excerpt ?? '',
+        content: editingBlog?.content ?? '',
+      });
+    }
+  }, [isBlogDialogOpen, editingBlog, reset]);
 
-  const saveBlogs = (newList: BlogPost[]) => {
-    setBlogPosts(newList);
-    localStorage.setItem('blog_posts', JSON.stringify(newList));
+  const load = async () => {
+    try {
+      const list = await api.blogs.list();
+      setBlogPosts(
+        list.map((b) => ({
+          id: b.id,
+          title: b.title,
+          slug: b.slug,
+          excerpt: b.excerpt,
+          content: b.content,
+          coverImage: b.coverImage,
+          author: b.author,
+          date: b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 10) : '',
+          category: b.category,
+          readTime: b.readTime,
+        })),
+      );
+    } catch (e) {
+      console.error('Failed to load blogs', e);
+    }
   };
 
-  const handleAddEditBlog = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const title = formData.get('title') as string;
-    const data: Partial<BlogPost> = {
-      title,
-      slug: title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, ''),
-      excerpt: formData.get('excerpt') as string,
-      content: formData.get('content') as string,
-      coverImage: formData.get('coverImage') as string,
-      category: formData.get('category') as string,
-      author: 'Admin',
-      date: new Date().toISOString().split('T')[0],
-      readTime: '5 min read'
-    };
+  useEffect(() => { load(); }, []);
 
-    if (editingBlog) {
-      const newList = blogPosts.map(b => b.id === editingBlog.id ? { ...editingBlog, ...data } : b);
-      saveBlogs(newList);
-    } else {
-      const newBlog: BlogPost = {
-        id: `b-${Date.now()}`,
-        ...(data as Omit<BlogPost, 'id'>)
-      };
-      saveBlogs([...blogPosts, newBlog]);
+  const onSaveBlog = async (values: BlogValues) => {
+    const body = {
+      title: values.title,
+      slug: values.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, ''),
+      excerpt: values.excerpt,
+      content: values.content,
+      coverImage: values.coverImage,
+      category: values.category,
+      author: 'Admin',
+      readTime: '5 min read',
+    };
+    try {
+      if (editingBlog) await api.blogs.update(editingBlog.id, body);
+      else await api.blogs.create(body);
+      await load();
+    } catch (err: any) {
+      swal.error(err?.message || 'A post with this title/slug may already exist.', 'Save failed');
+      return;
     }
     setIsBlogDialogOpen(false);
     setEditingBlog(null);
   };
 
-  const handleDeleteBlog = (id: string) => {
-    if (confirm('Are you sure you want to delete this blog post?')) {
-      saveBlogs(blogPosts.filter(b => b.id !== id));
+  const handleDeleteBlog = async (id: string) => {
+    if (!(await swal.confirm('This will permanently delete the blog post.', { title: 'Delete blog post?', confirmText: 'Delete', variant: 'error' }))) return;
+    try {
+      await api.blogs.remove(id);
+      setBlogPosts((l) => l.filter((b) => b.id !== id));
+    } catch (e: any) {
+      swal.error(e?.message || 'Delete failed');
     }
   };
 
@@ -115,25 +151,27 @@ export default function AdminBlogs() {
                 <DialogHeader>
                   <DialogTitle>{editingBlog ? 'Edit Post' : 'Add New Post'}</DialogTitle>
                 </DialogHeader>
-                <form key={editingBlog?.id || 'new-blog-form'} onSubmit={handleAddEditBlog} className="space-y-6 pt-4">
-                  <div className="space-y-2">
+                <form onSubmit={handleSubmit(onSaveBlog)} noValidate className="space-y-6 pt-4">
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Post Title</label>
-                    <Input name="title" defaultValue={editingBlog?.title} required placeholder="e.g. 5 Web Design Trends to Watch in 2024" />
+                    <Input {...register('title')} placeholder="e.g. 5 Web Design Trends to Watch in 2024" />
+                    <FieldError msg={errors.title?.message} />
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Category</label>
-                      <select name="category" defaultValue={editingBlog?.category || 'Education'} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
+                      <select {...register('category')} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
                         <option>Education</option>
                         <option>Finance</option>
                         <option>Travel</option>
                         <option>Student Life</option>
                       </select>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <label className="text-sm font-medium">Cover Image URL</label>
-                      <Input name="coverImage" defaultValue={editingBlog?.coverImage} required placeholder="https://..." />
+                      <Input {...register('coverImage')} placeholder="https://..." />
+                      <FieldError msg={errors.coverImage?.message} />
                     </div>
                   </div>
 
@@ -141,36 +179,36 @@ export default function AdminBlogs() {
                      <label className="text-sm font-medium italic opacity-70">Permalink: yourwebsite.com/{editingBlog?.slug || 'post-title-here'}</label>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Excerpt (Short description)</label>
-                    <textarea 
-                      name="excerpt" 
-                      defaultValue={editingBlog?.excerpt}
-                      required 
+                    <textarea
+                      {...register('excerpt')}
                       className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
                     />
+                    <FieldError msg={errors.excerpt?.message} />
                   </div>
 
-                  <div className="space-y-2 border rounded-xl overflow-hidden">
-                    <div className="bg-muted/50 p-2 border-b flex gap-2">
-                       <Button type="button" variant="ghost" size="sm" className="h-8 font-bold">B</Button>
-                       <Button type="button" variant="ghost" size="sm" className="h-8 italic">I</Button>
-                       <Button type="button" variant="ghost" size="sm" className="h-8 underline">U</Button>
-                       <div className="w-px h-6 bg-border mx-1" />
-                       <Button type="button" variant="ghost" size="sm" className="h-8 gap-2"><ImageIcon className="w-4 h-4" /> Add Media</Button>
+                  <div className="space-y-1.5">
+                    <div className="border rounded-xl overflow-hidden">
+                      <div className="bg-muted/50 p-2 border-b flex gap-2">
+                         <Button type="button" variant="ghost" size="sm" className="h-8 font-bold">B</Button>
+                         <Button type="button" variant="ghost" size="sm" className="h-8 italic">I</Button>
+                         <Button type="button" variant="ghost" size="sm" className="h-8 underline">U</Button>
+                         <div className="w-px h-6 bg-border mx-1" />
+                         <Button type="button" variant="ghost" size="sm" className="h-8 gap-2"><ImageIcon className="w-4 h-4" /> Add Media</Button>
+                      </div>
+                      <textarea
+                        {...register('content')}
+                        placeholder="Write your story here..."
+                        className="flex min-h-[300px] w-full border-none bg-transparent px-3 py-2 text-sm focus-visible:outline-none"
+                      />
                     </div>
-                    <textarea 
-                      name="content" 
-                      defaultValue={editingBlog?.content}
-                      required 
-                      placeholder="Write your story here..."
-                      className="flex min-h-[300px] w-full border-none bg-transparent px-3 py-2 text-sm focus-visible:outline-none"
-                    />
+                    <FieldError msg={errors.content?.message} />
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4">
                     <Button type="button" variant="outline" onClick={() => setIsBlogDialogOpen(false)}>Cancel</Button>
-                    <Button type="submit">Publish Post</Button>
+                    <Button type="submit" disabled={isSubmitting}>Publish Post</Button>
                   </div>
                 </form>
               </DialogContent>

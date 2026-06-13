@@ -1,135 +1,112 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { api, tokenStore, ApiError, type AuthUser, type Role } from './api';
 
-interface AuthContextType {
-  user: User | null;
-  role: 'student' | 'admin' | 'agent' | null;
-  loading: boolean;
-  loginAsDummy?: () => void;
-  loginAsAdminDummy?: (email: string) => void;
-  loginAsAgentDummy?: () => void;
+export interface DisplayUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string;
+  role: Role;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, role: null, loading: true });
+type UiRole = 'student' | 'admin' | 'agent' | null;
+
+interface AuthContextType {
+  user: DisplayUser | null;
+  role: UiRole;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<DisplayUser>;
+  register: (input: { email: string; password: string; role?: 'STUDENT' | 'AGENT'; name?: string; phoneNumber?: string }) => Promise<DisplayUser>;
+  logout: () => Promise<void>;
+  // Backwards-compatible quick logins — now hit the real backend with seeded demo accounts.
+  loginAsDummy: () => Promise<void>;
+  loginAsAdminDummy: (email?: string) => Promise<void>;
+  loginAsAgentDummy: () => Promise<void>;
+}
+
+const noop = async () => { throw new Error('AuthProvider not mounted'); };
+
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  role: null,
+  loading: true,
+  login: noop as never,
+  register: noop as never,
+  logout: async () => {},
+  loginAsDummy: noop,
+  loginAsAdminDummy: noop,
+  loginAsAgentDummy: noop,
+});
+
+const toUiRole = (r: Role): UiRole => (r === 'ADMIN' ? 'admin' : r === 'AGENT' ? 'agent' : 'student');
+
+function toDisplayUser(u: AuthUser): DisplayUser {
+  const local = u.email.split('@')[0].replace(/[._]+/g, ' ').trim();
+  const pretty = local.replace(/\b\w/g, (c) => c.toUpperCase());
+  const displayName = u.role === 'ADMIN' ? 'System Admin' : u.role === 'AGENT' ? 'Premium Agent' : pretty || 'Student';
+  return {
+    uid: u.id,
+    email: u.email,
+    displayName,
+    photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.email)}`,
+    role: u.role,
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<'student' | 'admin' | 'agent' | null>(null);
+  const [user, setUser] = useState<DisplayUser | null>(null);
+  const [role, setRole] = useState<UiRole>(null);
   const [loading, setLoading] = useState(true);
 
-  const loginAsDummy = () => {
-    const dummyStudent = {
-      uid: 'dummy-student-id',
-      email: 'student@example.com',
-      displayName: 'Dummy Student',
-      photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=student',
-    };
-    setUser(dummyStudent as any);
-    setRole('student');
-    localStorage.setItem('dummyUser', JSON.stringify(dummyStudent));
+  const applyUser = (u: AuthUser): DisplayUser => {
+    const d = toDisplayUser(u);
+    setUser(d);
+    setRole(toUiRole(u.role));
+    return d;
   };
 
-  const loginAsAdminDummy = (email: string) => {
-    const dummyAdmin = {
-      uid: 'dummy-admin-id',
-      email: email,
-      displayName: 'System Admin',
-      photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
-    };
-    setUser(dummyAdmin as any);
-    setRole('admin');
-    localStorage.setItem('dummyAdmin', JSON.stringify(dummyAdmin));
-  };
-
-  const loginAsAgentDummy = () => {
-    const dummyAgent = {
-      uid: 'dummy-agent-id',
-      email: 'agent@example.com',
-      displayName: 'Premium Agent',
-      photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=agent',
-    };
-    setUser(dummyAgent as any);
-    setRole('agent');
-    localStorage.setItem('dummyAgent', JSON.stringify(dummyAgent));
-  };
-
+  // Restore session from a stored token on first load.
   useEffect(() => {
-    try {
-      const savedDummy = localStorage.getItem('dummyUser');
-      const savedAdmin = localStorage.getItem('dummyAdmin');
-      const savedAgent = localStorage.getItem('dummyAgent');
-
-      if (savedAdmin) {
-        setUser(JSON.parse(savedAdmin));
-        setRole('admin');
-        setLoading(false);
-        return;
-      }
-
-      if (savedAgent) {
-        setUser(JSON.parse(savedAgent));
-        setRole('agent');
-        setLoading(false);
-        return;
-      }
-
-      if (savedDummy) {
-        setUser(JSON.parse(savedDummy));
-        setRole('student');
-        setLoading(false);
-        return;
-      }
-    } catch (e) {
-      console.error('Failed to parse saved user from localStorage', e);
-      localStorage.removeItem('dummyUser');
-      localStorage.removeItem('dummyAdmin');
-      localStorage.removeItem('dummyAgent');
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      try {
-        if (user) {
-          setUser(user);
-          if (user.email === 'ashwani.kumar1406@gmail.com' || user.email === 'admin@email.com') {
-            setRole('admin');
-          } else {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-              setRole(userDoc.data().role);
-            } else {
-              setRole('student');
-            }
-          }
-        } else {
-          setUser(null);
-          setRole(null);
+    (async () => {
+      if (tokenStore.access) {
+        try {
+          const me = await api.auth.me();
+          applyUser(me);
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) tokenStore.clear();
         }
-      } catch (err) {
-        console.error("Auth state processing error:", err);
-        setRole(null);
-      } finally {
-        setLoading(false);
       }
-    });
-
-    // Final safety to prevent infinite loading if firebase is slow
-    const safetyTimeout = setTimeout(() => {
-      setLoading((prev) => {
-        if (prev) console.warn("Auth loading timed out, forcing complete.");
-        return false;
-      });
-    }, 8000);
-
-    return () => {
-      unsubscribe();
-      clearTimeout(safetyTimeout);
-    };
+      setLoading(false);
+    })();
   }, []);
 
+  const login = async (email: string, password: string) => {
+    const res = await api.auth.login(email, password);
+    tokenStore.set(res.accessToken, res.refreshToken);
+    return applyUser(res.user);
+  };
+
+  const register = async (input: { email: string; password: string; role?: 'STUDENT' | 'AGENT'; name?: string; phoneNumber?: string }) => {
+    const res = await api.auth.register({ ...input, consent: true });
+    tokenStore.set(res.accessToken, res.refreshToken);
+    return applyUser(res.user);
+  };
+
+  const logout = async () => {
+    try { await api.auth.logout(); } catch { /* ignore */ }
+    tokenStore.clear();
+    setUser(null);
+    setRole(null);
+  };
+
+  const loginAsDummy = async () => { await login('alex.j@example.com', 'Password1!'); };
+  const loginAsAdminDummy = async (_email?: string) => { await login('admin@flytogether.com', 'Password1!'); };
+  const loginAsAgentDummy = async () => { await login('agent@flytogether.com', 'Password1!'); };
+
   return (
-    <AuthContext.Provider value={{ user, role, loading, loginAsDummy, loginAsAdminDummy, loginAsAgentDummy }}>
+    <AuthContext.Provider
+      value={{ user, role, loading, login, register, logout, loginAsDummy, loginAsAdminDummy, loginAsAgentDummy }}
+    >
       {children}
     </AuthContext.Provider>
   );

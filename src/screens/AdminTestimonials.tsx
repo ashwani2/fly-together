@@ -30,61 +30,96 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Testimonial } from '@/types';
-import { mockTestimonials } from '@/mockData';
+import { api } from '@/lib/api';
+import { swal } from '@/lib/swal';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const testimonialSchema = z.object({
+  studentName: z.string().trim().min(1, 'Student name is required'),
+  universityName: z.string().optional(),
+  content: z.string().trim().min(1, 'Testimony is required'),
+  mediaType: z.enum(['image', 'video']),
+  mediaUrl: z.string().trim().min(1, 'Media URL is required'),
+});
+type TestimonialValues = z.infer<typeof testimonialSchema>;
+
+function FieldError({ msg }: { msg?: string }) {
+  return msg ? <p className="px-1 text-xs font-medium text-red-600">{msg}</p> : null;
+}
 
 export default function AdminTestimonials() {
-  const [testimonialList, setTestimonialList] = useState<Testimonial[]>(() => {
-    const saved = localStorage.getItem('testimonials');
-    return saved ? JSON.parse(saved) : mockTestimonials;
-  });
+  const [testimonialList, setTestimonialList] = useState<Testimonial[]>([]);
   const [isTestimonialDialogOpen, setIsTestimonialDialogOpen] = useState(false);
   const [editingTestimonial, setEditingTestimonial] = useState<Testimonial | null>(null);
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<TestimonialValues>({
+    resolver: zodResolver(testimonialSchema),
+    defaultValues: { studentName: '', universityName: '', content: '', mediaType: 'image', mediaUrl: '' },
+  });
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const savedTestimonials = localStorage.getItem('testimonials');
-      if (savedTestimonials) {
-        setTestimonialList(JSON.parse(savedTestimonials));
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isTestimonialDialogOpen) {
+      reset({
+        studentName: editingTestimonial?.studentName ?? '',
+        universityName: editingTestimonial?.universityName ?? '',
+        content: editingTestimonial?.content ?? '',
+        mediaType: editingTestimonial?.mediaType === 'video' ? 'video' : 'image',
+        mediaUrl: editingTestimonial?.mediaUrl ?? '',
+      });
+    }
+  }, [isTestimonialDialogOpen, editingTestimonial, reset]);
 
-  const saveTestimonials = (newList: Testimonial[]) => {
-    setTestimonialList(newList);
-    localStorage.setItem('testimonials', JSON.stringify(newList));
+  const load = async () => {
+    try {
+      const list = await api.testimonials.list();
+      setTestimonialList(
+        list.map((t) => ({
+          id: t.id,
+          studentName: t.studentName,
+          universityName: t.universityName ?? undefined,
+          content: t.content,
+          mediaUrl: t.mediaUrl,
+          mediaType: t.mediaType === 'VIDEO' ? 'video' : 'image',
+          avatarUrl: t.avatarUrl ?? undefined,
+          date: '',
+        })),
+      );
+    } catch (e) {
+      console.error('Failed to load testimonials', e);
+    }
   };
 
-  const handleAddEditTestimonial = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data: Partial<Testimonial> = {
-      studentName: formData.get('studentName') as string,
-      universityName: formData.get('universityName') as string,
-      content: formData.get('content') as string,
-      mediaUrl: formData.get('mediaUrl') as string,
-      mediaType: formData.get('mediaType') as 'image' | 'video',
-      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.get('studentName')}`,
-      date: new Date().toISOString().split('T')[0],
-    };
+  useEffect(() => { load(); }, []);
 
-    if (editingTestimonial) {
-      const newList = testimonialList.map(t => t.id === editingTestimonial.id ? { ...editingTestimonial, ...data } : t);
-      saveTestimonials(newList);
-    } else {
-      const newTestimonial: Testimonial = {
-        id: `t-${Date.now()}`,
-        ...(data as Omit<Testimonial, 'id'>)
-      };
-      saveTestimonials([...testimonialList, newTestimonial]);
+  const onSaveTestimonial = async (values: TestimonialValues) => {
+    const body = {
+      studentName: values.studentName,
+      universityName: values.universityName || undefined,
+      content: values.content,
+      mediaUrl: values.mediaUrl,
+      mediaType: (values.mediaType === 'video' ? 'VIDEO' : 'IMAGE') as 'IMAGE' | 'VIDEO',
+      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(values.studentName)}`,
+    };
+    try {
+      if (editingTestimonial) await api.testimonials.update(editingTestimonial.id, body);
+      else await api.testimonials.create(body);
+      await load();
+    } catch (err: any) {
+      swal.error(err?.message || 'Save failed');
+      return;
     }
     setIsTestimonialDialogOpen(false);
     setEditingTestimonial(null);
   };
 
-  const handleDeleteTestimonial = (id: string) => {
-    if (confirm('Are you sure you want to delete this testimonial?')) {
-      saveTestimonials(testimonialList.filter(t => t.id !== id));
+  const handleDeleteTestimonial = async (id: string) => {
+    if (!(await swal.confirm('This will permanently delete the testimonial.', { title: 'Delete testimonial?', confirmText: 'Delete', variant: 'error' }))) return;
+    try {
+      await api.testimonials.remove(id);
+      setTestimonialList((l) => l.filter((t) => t.id !== id));
+    } catch (e: any) {
+      swal.error(e?.message || 'Delete failed');
     }
   };
 
@@ -118,51 +153,47 @@ export default function AdminTestimonials() {
                     Fill in student details and their story to feature on the homepage.
                   </DialogDescription>
                 </DialogHeader>
-                <form 
-                  key={editingTestimonial?.id || 'new-testimonial-form'} 
-                  onSubmit={handleAddEditTestimonial} 
-                  className="space-y-4 pt-4"
-                >
+                <form onSubmit={handleSubmit(onSaveTestimonial)} noValidate className="space-y-4 pt-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <label className="text-sm font-medium">Student Name</label>
-                      <Input name="studentName" defaultValue={editingTestimonial?.studentName} required placeholder="e.g. John Doe" />
+                      <Input {...register('studentName')} placeholder="e.g. John Doe" />
+                      <FieldError msg={errors.studentName?.message} />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <label className="text-sm font-medium">University</label>
-                      <Input name="universityName" defaultValue={editingTestimonial?.universityName} placeholder="e.g. Oxford" />
+                      <Input {...register('universityName')} placeholder="e.g. Oxford" />
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Testimony</label>
-                    <textarea 
-                      name="content" 
-                      defaultValue={editingTestimonial?.content}
-                      required 
+                    <textarea
+                      {...register('content')}
                       className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       placeholder="What did the student say?"
                     />
+                    <FieldError msg={errors.content?.message} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Media Type</label>
-                      <select 
-                        name="mediaType" 
-                        defaultValue={editingTestimonial?.mediaType || 'image'}
+                      <select
+                        {...register('mediaType')}
                         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       >
                         <option value="image">Image</option>
                         <option value="video">Video</option>
                       </select>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <label className="text-sm font-medium">Media URL</label>
-                      <Input name="mediaUrl" defaultValue={editingTestimonial?.mediaUrl} required placeholder="URL to image/video" />
+                      <Input {...register('mediaUrl')} placeholder="URL to image/video" />
+                      <FieldError msg={errors.mediaUrl?.message} />
                     </div>
                   </div>
                   <div className="flex justify-end gap-3 pt-4">
                     <Button type="button" variant="outline" onClick={() => setIsTestimonialDialogOpen(false)}>Cancel</Button>
-                    <Button type="submit">Save Testimonial</Button>
+                    <Button type="submit" disabled={isSubmitting}>Save Testimonial</Button>
                   </div>
                 </form>
               </DialogContent>

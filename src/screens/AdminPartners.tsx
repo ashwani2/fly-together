@@ -1,5 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api, type ServiceCategory } from '@/lib/api';
+import { swal } from '@/lib/swal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -17,29 +19,79 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 
-const INITIAL_PARTNERS = [
-  { id: 'p1', name: 'Global Logistics co.', service: 'Visa Processing', status: 'Active', commissions: '£4,500' },
-  { id: 'p2', name: 'Swift Move', service: 'Shipping', status: 'Under Review', commissions: '£850' },
-  { id: 'p3', name: 'TransferWise', service: 'Payments', status: 'Active', commissions: '£12,300' },
-  { id: 'p4', name: 'Student Comforts', service: 'Accommodation', status: 'Active', commissions: '£2,100' },
+const CATEGORY_OPTIONS: { value: ServiceCategory; label: string }[] = [
+  { value: 'ACCOMMODATION', label: 'Accommodation' },
+  { value: 'TICKET_BOOKING', label: 'Ticket Booking' },
+  { value: 'LOANS', label: 'Loans' },
+  { value: 'LOGISTICS', label: 'Logistics' },
+  { value: 'ONLINE_PAYMENT', label: 'Online Payment' },
 ];
+const CATEGORY_LABEL = Object.fromEntries(CATEGORY_OPTIONS.map((c) => [c.value, c.label])) as Record<ServiceCategory, string>;
+
+interface PartnerRow { id: string; name: string; service: string; status: string; commissions: string }
+
+const partnerSchema = z.object({
+  name: z.string().trim().min(1, 'Company name is required'),
+  category: z.enum(['ACCOMMODATION', 'TICKET_BOOKING', 'LOANS', 'LOGISTICS', 'ONLINE_PAYMENT']),
+  price: z.string().optional(),
+});
+type PartnerValues = z.infer<typeof partnerSchema>;
+
+function FieldError({ msg }: { msg?: string }) {
+  return msg ? <p className="col-span-3 col-start-2 px-1 text-xs font-medium text-red-600">{msg}</p> : null;
+}
 
 export default function AdminPartners() {
-  const [data, setData] = useState(INITIAL_PARTNERS);
+  const [data, setData] = useState<PartnerRow[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [newPartner, setNewPartner] = useState({ name: '', service: '', status: 'Active', commissions: '£0' });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<PartnerValues>({
+    resolver: zodResolver(partnerSchema),
+    defaultValues: { name: '', category: 'LOGISTICS', price: '' },
+  });
 
-  const handleAddPartner = (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = `p${Date.now()}`;
-    setData([...data, { ...newPartner, id }]);
-    setNewPartner({ name: '', service: '', status: 'Active', commissions: '£0' });
+  const load = async () => {
+    try {
+      const list = await api.serviceProviders.list();
+      setData(list.map((s) => ({ id: s.id, name: s.name, service: CATEGORY_LABEL[s.category], status: 'Active', commissions: s.price })));
+    } catch (e) {
+      console.error('Failed to load service providers', e);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const onAddPartner = async (values: PartnerValues) => {
+    try {
+      await api.serviceProviders.create({
+        name: values.name,
+        category: values.category,
+        rating: 0,
+        price: values.price || 'Contact for pricing',
+        image: `https://picsum.photos/seed/${encodeURIComponent(values.name)}/400/300`,
+        description: values.name,
+        location: undefined,
+      } as any);
+      await load();
+    } catch (err: any) {
+      swal.error(err?.message || 'Save failed');
+      return;
+    }
+    reset({ name: '', category: 'LOGISTICS', price: '' });
     setIsOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    setData(data.filter(p => p.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!(await swal.confirm('This will remove the service provider.', { title: 'Delete provider?', confirmText: 'Delete', variant: 'error' }))) return;
+    try {
+      await api.serviceProviders.remove(id);
+      setData((l) => l.filter((p) => p.id !== id));
+    } catch (e: any) {
+      swal.error(e?.message || 'Delete failed');
+    }
   };
 
   return (
@@ -50,7 +102,7 @@ export default function AdminPartners() {
           <p className="text-muted-foreground">Configure service level agreements and revenue sharing.</p>
         </div>
         
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) reset({ name: '', category: 'LOGISTICS', price: '' }); }}>
           <DialogTrigger render={
             <Button className="gap-2">
               <Handshake className="w-4 h-4" />
@@ -58,7 +110,7 @@ export default function AdminPartners() {
             </Button>
           } />
           <DialogContent>
-            <form onSubmit={handleAddPartner}>
+            <form onSubmit={handleSubmit(onAddPartner)} noValidate>
               <DialogHeader>
                 <DialogTitle>Invite New Partner</DialogTitle>
                 <DialogDescription>
@@ -66,30 +118,30 @@ export default function AdminPartners() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
+                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="name" className="text-right">Company Name</Label>
-                  <Input 
-                    id="name" 
-                    className="col-span-3" 
-                    value={newPartner.name}
-                    onChange={(e) => setNewPartner({...newPartner, name: e.target.value})}
-                    required
-                  />
+                  <Input id="name" className="col-span-3" {...register('name')} />
+                  <FieldError msg={errors.name?.message} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="service" className="text-right">Service Type</Label>
-                  <Input 
-                    id="service" 
-                    placeholder="e.g. Health Insurance"
-                    className="col-span-3"
-                    value={newPartner.service}
-                    onChange={(e) => setNewPartner({...newPartner, service: e.target.value})}
-                    required
-                  />
+                  <Label htmlFor="category" className="text-right">Category</Label>
+                  <select
+                    id="category"
+                    className="col-span-3 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    {...register('category')}
+                  >
+                    {CATEGORY_OPTIONS.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="price" className="text-right">Price</Label>
+                  <Input id="price" placeholder="e.g. From £120/week" className="col-span-3" {...register('price')} />
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit">Send Invitation</Button>
+                <Button type="submit" disabled={isSubmitting}>Send Invitation</Button>
               </DialogFooter>
             </form>
           </DialogContent>

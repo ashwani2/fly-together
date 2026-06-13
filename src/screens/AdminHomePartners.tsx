@@ -27,57 +27,70 @@ import {
   DialogDescription
 } from "@/components/ui/dialog";
 import { HomePartner } from '@/types';
-import { mockHomePartners } from '@/mockData';
+import { api } from '@/lib/api';
+import { swal } from '@/lib/swal';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const partnerSchema = z.object({
+  name: z.string().trim().min(1, 'Partner name is required'),
+  logo: z.string().trim().min(1, 'Logo URL is required').url('Enter a valid URL'),
+  redirectUrl: z.string().trim().min(1, 'Redirection URL is required').url('Enter a valid URL'),
+});
+type PartnerValues = z.infer<typeof partnerSchema>;
+
+function FieldError({ msg }: { msg?: string }) {
+  return msg ? <p className="px-1 text-xs font-medium text-red-600">{msg}</p> : null;
+}
 
 export default function AdminHomePartners() {
-  const [partnerList, setPartnerList] = useState<HomePartner[]>(() => {
-    const saved = localStorage.getItem('home_partners');
-    return saved ? JSON.parse(saved) : mockHomePartners;
-  });
+  const [partnerList, setPartnerList] = useState<HomePartner[]>([]);
   const [isPartnerDialogOpen, setIsPartnerDialogOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<HomePartner | null>(null);
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<PartnerValues>({
+    resolver: zodResolver(partnerSchema),
+    defaultValues: { name: '', logo: '', redirectUrl: '' },
+  });
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const savedPartners = localStorage.getItem('home_partners');
-      if (savedPartners) {
-        setPartnerList(JSON.parse(savedPartners));
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isPartnerDialogOpen) {
+      reset({ name: editingPartner?.name ?? '', logo: editingPartner?.logo ?? '', redirectUrl: editingPartner?.redirectUrl ?? '' });
+    }
+  }, [isPartnerDialogOpen, editingPartner, reset]);
 
-  const savePartners = (newList: HomePartner[]) => {
-    setPartnerList(newList);
-    localStorage.setItem('home_partners', JSON.stringify(newList));
+  const load = async () => {
+    try {
+      const list = await api.partners.list();
+      setPartnerList(list.map((p) => ({ id: p.id, name: p.name, logo: p.imageUrl, redirectUrl: p.redirectionUrl })));
+    } catch (e) {
+      console.error('Failed to load partners', e);
+    }
   };
 
-  const handleAddEditPartner = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data: Partial<HomePartner> = {
-      name: formData.get('name') as string,
-      logo: formData.get('logo') as string,
-      redirectUrl: formData.get('redirectUrl') as string,
-    };
+  useEffect(() => { load(); }, []);
 
-    if (editingPartner) {
-      const newList = partnerList.map(p => p.id === editingPartner.id ? { ...editingPartner, ...data } : p);
-      savePartners(newList);
-    } else {
-      const newPartner: HomePartner = {
-        id: `hp-${Date.now()}`,
-        ...(data as Omit<HomePartner, 'id'>)
-      };
-      savePartners([...partnerList, newPartner]);
+  const onSavePartner = async (values: PartnerValues) => {
+    const body = { name: values.name, imageUrl: values.logo, redirectionUrl: values.redirectUrl };
+    try {
+      if (editingPartner) await api.partners.update(editingPartner.id, body);
+      else await api.partners.create(body);
+      await load();
+    } catch (err: any) {
+      swal.error(err?.message || 'Save failed');
+      return;
     }
     setIsPartnerDialogOpen(false);
     setEditingPartner(null);
   };
 
-  const handleDeletePartner = (id: string) => {
-    if (confirm('Are you sure you want to delete this partner?')) {
-      savePartners(partnerList.filter(p => p.id !== id));
+  const handleDeletePartner = async (id: string) => {
+    if (!(await swal.confirm('This will remove the partner from the home marquee.', { title: 'Delete partner?', confirmText: 'Delete', variant: 'error' }))) return;
+    try {
+      await api.partners.remove(id);
+      setPartnerList((l) => l.filter((p) => p.id !== id));
+    } catch (e: any) {
+      swal.error(e?.message || 'Delete failed');
     }
   };
 
@@ -111,22 +124,25 @@ export default function AdminHomePartners() {
                     Provide partner name, logo URL and the redirection link.
                   </DialogDescription>
                 </DialogHeader>
-                <form key={editingPartner?.id || 'new-partner-form'} onSubmit={handleAddEditPartner} className="space-y-4 pt-4">
-                  <div className="space-y-2">
+                <form onSubmit={handleSubmit(onSavePartner)} noValidate className="space-y-4 pt-4">
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Partner Name</label>
-                    <Input name="name" defaultValue={editingPartner?.name} required placeholder="e.g. Global Education" />
+                    <Input {...register('name')} placeholder="e.g. Global Education" />
+                    <FieldError msg={errors.name?.message} />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Logo URL</label>
-                    <Input name="logo" defaultValue={editingPartner?.logo} required placeholder="https://logo.clearbit.com/..." />
+                    <Input {...register('logo')} placeholder="https://logo.clearbit.com/..." />
+                    <FieldError msg={errors.logo?.message} />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Redirection URL (Newsletter/Cert)</label>
-                    <Input name="redirectUrl" defaultValue={editingPartner?.redirectUrl} required placeholder="https://..." />
+                    <Input {...register('redirectUrl')} placeholder="https://..." />
+                    <FieldError msg={errors.redirectUrl?.message} />
                   </div>
                   <div className="flex justify-end gap-3 pt-4">
                     <Button type="button" variant="outline" onClick={() => setIsPartnerDialogOpen(false)}>Cancel</Button>
-                    <Button type="submit">{editingPartner ? 'Update Partner' : 'Save Partner'}</Button>
+                    <Button type="submit" disabled={isSubmitting}>{editingPartner ? 'Update Partner' : 'Save Partner'}</Button>
                   </div>
                 </form>
               </DialogContent>

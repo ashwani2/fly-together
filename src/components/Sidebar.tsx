@@ -19,16 +19,15 @@ import {
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/lib/AuthContext';
-import { logout } from '@/lib/firebase';
 
 export function Sidebar({ className, onSettingsClick }: { className?: string, onSettingsClick?: () => void }) {
-  const { role } = useAuth();
+  const { role, logout } = useAuth();
   const navigate = useNavigate();
 
   const studentNavItems = [
     { icon: LayoutDashboard, label: 'Explore', path: '/dashboard' },
     { icon: Layers, label: 'Services', path: '/dashboard/services' },
-    { icon: FileText, label: 'My Progress', path: '/dashboard/applications' },
+    { icon: FileText, label: 'My Applications', path: '/dashboard/applications' },
     { icon: UserCircle, label: 'Profile & Docs', path: '/dashboard/profile' },
   ];
 

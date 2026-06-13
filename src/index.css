@@ -140,4 +140,59 @@
   html {
     @apply font-sans;
     }
+
+  /* Anything actionable shows a pointer on hover (Tailwind v4 Preflight
+     no longer does this for buttons). Disabled controls show not-allowed. */
+  button,
+  a[href],
+  label[for],
+  summary,
+  select,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="link"],
+  [onclick],
+  .cursor-pointer {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  button[disabled],
+  select:disabled,
+  [aria-disabled="true"],
+  .cursor-not-allowed {
+    cursor: not-allowed;
+  }
+}
+
+/* Date picker (react-day-picker) — compact sizing + spaced month/year dropdowns */
+.ft-datepicker .rdp-root {
+    font-size: 0.78rem;
+    --rdp-weekday-padding: 0.25rem 0;
+    --rdp-nav_button-width: 1.75rem;
+    --rdp-nav_button-height: 1.75rem;
+}
+.ft-datepicker .rdp-month_grid {
+    margin-top: 0.25rem;
+}
+.ft-datepicker .rdp-dropdowns {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.ft-datepicker .rdp-dropdown_root {
+    margin: 0 0.15rem;
+}
+.ft-datepicker .rdp-months_dropdown,
+.ft-datepicker .rdp-years_dropdown {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+}
+.ft-datepicker .rdp-month_caption {
+    margin-bottom: 0.4rem;
 }

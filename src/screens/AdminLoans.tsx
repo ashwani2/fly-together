@@ -39,11 +39,22 @@ import {
 } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
+import { api, type LoanApplication } from '@/lib/api';
+import { swal } from '@/lib/swal';
 
-const mockLoanApps = [
-  { id: 'LOAN-121', applicantName: 'John Doe', email: 'john@example.com', date: '2024-04-25', status: 'Pending', type: 'Education Loan' },
-  { id: 'LOAN-122', applicantName: 'Emma Watson', email: 'emma@test.com', date: '2024-04-20', status: 'Approved', type: 'Education Loan' },
-];
+interface LoanRow { id: string; applicantName: string; email: string; date: string; status: string; type: string }
+
+function toLoanRow(l: LoanApplication): LoanRow {
+  const d = (l.details ?? {}) as any;
+  return {
+    id: l.id,
+    applicantName: d.applicantName || 'Student',
+    email: d?.applicant?.email || '',
+    date: l.createdAt ? new Date(l.createdAt).toISOString().slice(0, 10) : '',
+    status: l.status,
+    type: d.type || 'Education Loan',
+  };
+}
 
 const docCategories = [
   {
@@ -79,21 +90,32 @@ const docCategories = [
 ];
 
 export default function AdminLoans() {
-  const [loanList, setLoanList] = useState(() => {
-    const saved = JSON.parse(localStorage.getItem('loan_applications') || '[]');
-    return [...mockLoanApps, ...saved];
-  });
-  const [selectedLoan, setSelectedLoan] = useState<any>(null);
+  const [loanList, setLoanList] = useState<LoanRow[]>([]);
+  const [selectedLoan, setSelectedLoan] = useState<LoanRow | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [applicantDocs, setApplicantDocs] = useState(docCategories);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const savedLoans = JSON.parse(localStorage.getItem('loan_applications') || '[]');
-      setLoanList([...mockLoanApps, ...savedLoans]);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  const load = async () => {
+    try {
+      const list = await api.loans.list();
+      setLoanList(list.map(toLoanRow));
+    } catch (e) {
+      console.error('Failed to load loans', e);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const updateLoanStatus = async (status: string) => {
+    if (!selectedLoan) return;
+    try {
+      await api.loans.updateStatus(selectedLoan.id, status);
+      await load();
+    } catch (e: any) {
+      swal.error(e?.message || 'Update failed');
+    }
+    setIsReviewOpen(false);
+  };
 
   const updateDocStatus = (catIdx: number, itemIdx: number, newStatus: string) => {
     const newDocs = [...applicantDocs];
@@ -140,10 +162,14 @@ export default function AdminLoans() {
                     </TableCell>
                     <TableCell className="text-xs font-mono">{loan.date}</TableCell>
                     <TableCell>
-                      <Badge 
+                      <Badge
                         className={cn(
                           "text-[10px] uppercase",
-                          loan.status === 'Pending' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"
+                          loan.status === 'APPROVED'
+                            ? "bg-green-500/10 text-green-500 border-green-500/20"
+                            : loan.status === 'REJECTED'
+                              ? "bg-red-500/10 text-red-500 border-red-500/20"
+                              : "bg-amber-500/10 text-amber-500 border-amber-500/20",
                         )}
                       >
                         {loan.status}
@@ -280,13 +306,15 @@ export default function AdminLoans() {
           <div className="flex-none p-4 md:p-6 border-t bg-background/60 backdrop-blur-xl">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-5xl mx-auto">
               <div className="flex flex-col sm:flex-row lg:flex-row gap-2 w-full sm:w-auto">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
+                  onClick={() => updateLoanStatus('REJECTED')}
                   className="w-full sm:w-auto h-11 md:h-12 px-6 rounded-2xl border-white/20 bg-background/50 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 text-muted-foreground gap-2 transition-all font-bold text-sm"
                 >
                   <XCircle className="w-5 h-5 text-destructive" /> Request Changes
                 </Button>
-                <Button 
+                <Button
+                  onClick={() => updateLoanStatus('APPROVED')}
                   className="w-full sm:w-auto h-11 md:h-12 px-8 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 gap-2 font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <CheckCircle2 className="w-5 h-5" /> Approve Documents

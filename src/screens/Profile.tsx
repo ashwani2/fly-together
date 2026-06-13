@@ -1,24 +1,152 @@
-
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Upload, FileText, CheckCircle2, AlertCircle, Clock, Trash2, Circle } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, Clock, Trash2, Loader2, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { mockDocuments } from '@/mockData';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
+import { api, type StudentDocument, type DocType, type DocStatus, type StudentProfile } from '@/lib/api';
+import { swal } from '@/lib/swal';
+import { DatePicker } from '@/components/DatePicker';
+import { DocumentViewer } from '@/components/DocumentViewer';
+
+const DOC_TYPES: { value: DocType; label: string }[] = [
+  { value: 'PASSPORT', label: 'Passport' },
+  { value: 'AADHAR', label: 'Aadhar' },
+  { value: 'ACADEMICS', label: 'Academic Transcripts' },
+  { value: 'IELTS', label: 'IELTS Certificate' },
+];
+
+const statusStyles: Record<string, string> = {
+  VERIFIED: 'bg-green-100 text-green-700',
+  REJECTED: 'bg-red-100 text-red-700',
+  UPLOADED: 'bg-blue-100 text-blue-700',
+  PENDING: 'bg-amber-100 text-amber-700',
+};
 
 export default function Profile() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'personal' | 'documents'>('personal');
 
-  const fullName = user?.displayName || 'Alex Johnson';
-  const firstName = fullName.split(' ')[0];
-  const lastName = fullName.split(' ').slice(1).join(' ') || '';
-  const email = user?.email || 'alex.j@example.com';
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [docs, setDocs] = useState<StudentDocument[]>([]);
+  const [form, setForm] = useState({ firstName: '', lastName: '', phoneNumber: '', dob: '', address: '' });
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState('');
+
+  const [uploadType, setUploadType] = useState<DocType>('PASSPORT');
+  const [uploading, setUploading] = useState(false);
+  const [viewer, setViewer] = useState<{ url: string; title: string; type: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const loadDocs = async () => {
+    try { setDocs(await api.students.documents()); } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [p, me] = await Promise.all([api.students.me(), api.auth.me()]);
+        setProfile(p);
+        setForm({
+          firstName: p.firstName ?? '',
+          lastName: p.lastName ?? '',
+          phoneNumber: me.phoneNumber ?? '',
+          dob: p.dob ? new Date(p.dob).toISOString().slice(0, 10) : '',
+          address: p.address ?? '',
+        });
+      } catch (e) {
+        console.error('Failed to load profile', e);
+      }
+      loadDocs();
+    })();
+  }, []);
+
+  const completion = profile?.profileCompletion ?? 0;
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSavedMsg('');
+    try {
+      const updated = await api.students.updateMe({
+        firstName: form.firstName || undefined,
+        lastName: form.lastName || undefined,
+        dob: form.dob || undefined,
+        address: form.address || undefined,
+        phoneNumber: form.phoneNumber || undefined,
+      });
+      setProfile(updated);
+      setSavedMsg('Saved!');
+      setTimeout(() => setSavedMsg(''), 2500);
+    } catch (e: any) {
+      setSavedMsg(e?.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await api.students.uploadDocument(uploadType, file);
+      await loadDocs();
+    } catch (err: any) {
+      swal.error(err?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.documents.remove(id);
+      setDocs((d) => d.filter((x) => x.id !== id));
+    } catch (e: any) {
+      swal.error(e?.message || 'Delete failed');
+    }
+  };
+
+  // Pre-select a document type and open the file picker for it.
+  const quickUpload = (t: DocType) => {
+    setUploadType(t);
+    setTimeout(() => fileRef.current?.click(), 0);
+  };
+
+  const statusForType = (t: DocType): DocStatus | null => docs.find((d) => d.docType === t)?.status ?? null;
+
+  const viewDocument = async (id: string, title: string) => {
+    try {
+      const { url } = await api.students.documentViewUrl(id);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Could not load the document.');
+      const blob = await resp.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      setViewer((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return { url: objectUrl, title, type: blob.type };
+      });
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not open document');
+    }
+  };
+
+  const closeViewer = () => {
+    setViewer((v) => {
+      if (v) URL.revokeObjectURL(v.url);
+      return null;
+    });
+  };
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const ringOffset = 251.2 * (1 - completion / 100);
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -28,21 +156,21 @@ export default function Profile() {
       </div>
 
       <div className="flex gap-4 border-b pb-px">
-        <button 
+        <button
           onClick={() => setActiveTab('personal')}
           className={cn(
-            "pb-4 px-2 text-sm font-medium transition-colors relative",
-            activeTab === 'personal' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            'pb-4 px-2 text-sm font-medium transition-colors relative',
+            activeTab === 'personal' ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
           )}
         >
           Personal Information
           {activeTab === 'personal' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('documents')}
           className={cn(
-            "pb-4 px-2 text-sm font-medium transition-colors relative",
-            activeTab === 'documents' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            'pb-4 px-2 text-sm font-medium transition-colors relative',
+            activeTab === 'documents' ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
           )}
         >
           Documents
@@ -61,32 +189,43 @@ export default function Profile() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue={firstName} />
+                  <Input id="firstName" value={form.firstName} onChange={set('firstName')} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue={lastName} />
+                  <Input id="lastName" value={form.lastName} onChange={set('lastName')} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" defaultValue={email} disabled />
+                <Input id="email" type="email" value={user?.email || ''} disabled />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" defaultValue="+44 7700 900000" />
+                  <Input id="phone" value={form.phoneNumber} onChange={set('phoneNumber')} placeholder="+44 7700 900000" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dob">Date of Birth</Label>
-                  <Input id="dob" type="date" defaultValue="2002-05-15" />
+                  <DatePicker
+                    id="dob"
+                    value={form.dob}
+                    onChange={(v) => setForm((f) => ({ ...f, dob: v }))}
+                    placeholder="Select your date of birth"
+                    max={new Date()}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="address">Current Address</Label>
-                <Input id="address" defaultValue="123 Student Lane, London, UK" />
+                <Input id="address" value={form.address} onChange={set('address')} placeholder="123 Student Lane, London, UK" />
               </div>
-              <Button className="w-full md:w-auto">Save Changes</Button>
+              <div className="flex items-center gap-4">
+                <Button onClick={handleSave} disabled={saving} className="w-full md:w-auto">
+                  {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : 'Save Changes'}
+                </Button>
+                {savedMsg && <span className="text-sm text-green-600 font-medium">{savedMsg}</span>}
+              </div>
             </CardContent>
           </Card>
 
@@ -99,26 +238,39 @@ export default function Profile() {
                 <div className="relative w-32 h-32">
                   <svg className="w-full h-full" viewBox="0 0 100 100">
                     <circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
-                    <circle className="text-primary stroke-current" strokeWidth="8" strokeDasharray="251.2" strokeDashoffset={251.2 * (1 - 0.85)} strokeLinecap="round" fill="transparent" r="40" cx="50" cy="50" transform="rotate(-90 50 50)" />
+                    <circle
+                      className="text-primary stroke-current transition-all duration-700"
+                      strokeWidth="8"
+                      strokeDasharray="251.2"
+                      strokeDashoffset={ringOffset}
+                      strokeLinecap="round"
+                      fill="transparent"
+                      r="40"
+                      cx="50"
+                      cy="50"
+                      transform="rotate(-90 50 50)"
+                    />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold">85%</span>
+                    <span className="text-2xl font-bold">{completion}%</span>
                   </div>
                 </div>
-                <p className="text-sm text-center text-muted-foreground">Almost there! Complete your education details to reach 100%.</p>
+                <p className="text-sm text-center text-muted-foreground">
+                  {completion === 100 ? 'Your profile is complete!' : 'Fill in all details to reach 100%.'}
+                </p>
               </div>
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-green-600">
+                <div className={cn('flex items-center gap-2 text-sm', form.firstName && form.lastName ? 'text-green-600' : 'text-muted-foreground')}>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Personal Info</span>
+                  <span>Name</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-green-600">
+                <div className={cn('flex items-center gap-2 text-sm', form.dob ? 'text-green-600' : 'text-muted-foreground')}>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Contact Details</span>
+                  <span>Date of Birth</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Circle className="w-4 h-4" />
-                  <span>Education History</span>
+                <div className={cn('flex items-center gap-2 text-sm', form.address ? 'text-green-600' : 'text-muted-foreground')}>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Address</span>
                 </div>
               </div>
             </CardContent>
@@ -126,64 +278,98 @@ export default function Profile() {
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Drag & Drop Area */}
-          <div className="border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center gap-4 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-              <Upload className="w-8 h-8" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold">Click or drag files to upload</p>
-              <p className="text-sm text-muted-foreground">Support for PDF, JPG, PNG (Max 10MB)</p>
-            </div>
-            <Button variant="outline">Select Files</Button>
-          </div>
-
-          {/* Document List */}
+          {/* Required documents checklist */}
           <Card>
             <CardHeader>
-              <CardTitle>Uploaded Documents</CardTitle>
-              <CardDescription>Track the verification status of your documents.</CardDescription>
+              <CardTitle>Upload a document</CardTitle>
+              <CardDescription>
+                PDF, JPG, PNG (Max 10MB) · {DOC_TYPES.filter((d) => statusForType(d.value) === 'VERIFIED').length} of {DOC_TYPES.length} verified
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {mockDocuments.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between p-4 rounded-xl border bg-card hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center text-primary">
-                        <FileText className="w-5 h-5" />
+              <div className="space-y-3">
+                {DOC_TYPES.map((d) => {
+                  const doc = docs.find((x) => x.docType === d.value);
+                  const status = doc?.status ?? null;
+                  const verified = status === 'VERIFIED';
+                  const rejected = status === 'REJECTED';
+                  const review = status === 'UPLOADED' || status === 'PENDING';
+                  return (
+                    <div key={d.value} className="flex items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            'grid h-9 w-9 shrink-0 place-items-center rounded-lg',
+                            verified ? 'bg-green-500/10 text-green-600' :
+                            rejected ? 'bg-red-500/10 text-red-600' :
+                            review ? 'bg-blue-500/10 text-blue-600' :
+                            'bg-amber-500/10 text-amber-600',
+                          )}
+                        >
+                          {verified ? <CheckCircle2 className="h-5 w-5" /> :
+                           rejected ? <AlertCircle className="h-5 w-5" /> :
+                           review ? <Clock className="h-5 w-5" /> :
+                           <FileText className="h-5 w-5" />}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{d.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc
+                              ? `Uploaded on ${new Date(doc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}${rejected ? ' · please re-upload' : ''}`
+                              : 'Pending upload'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{doc.name}</p>
-                        <p className="text-xs text-muted-foreground">Uploaded on {doc.uploadDate}</p>
-                      </div>
+                      {doc ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="secondary" className={cn('shrink-0', statusStyles[doc.status])}>
+                            {doc.status.charAt(0) + doc.status.slice(1).toLowerCase()}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => viewDocument(doc.id, d.label)}
+                            aria-label={`View ${d.label}`}
+                            title="View document"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDelete(doc.id)}
+                            aria-label={`Delete ${d.label}`}
+                            title="Delete document"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button variant="outline" size="sm" disabled={uploading} onClick={() => quickUpload(d.value)}>
+                          <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload
+                        </Button>
+                      )}
                     </div>
-                    <div className="flex items-center gap-6">
-                      <Badge 
-                        variant="secondary"
-                        className={cn(
-                          "px-3 py-1",
-                          doc.status === 'Verified' ? "bg-green-100 text-green-700" :
-                          doc.status === 'Rejected' ? "bg-red-100 text-red-700" :
-                          doc.status === 'Uploaded' ? "bg-blue-100 text-blue-700" :
-                          "bg-amber-100 text-amber-700"
-                        )}
-                      >
-                        {doc.status === 'Verified' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                        {doc.status === 'Rejected' && <AlertCircle className="w-3 h-3 mr-1" />}
-                        {doc.status === 'Pending' && <Clock className="w-3 h-3 mr-1" />}
-                        {doc.status}
-                      </Badge>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
+
+          {/* Hidden input used by the per-document Upload buttons */}
+          <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFile} />
         </div>
       )}
+
+      <DocumentViewer
+        open={!!viewer}
+        url={viewer?.url ?? null}
+        title={viewer?.title ?? 'Document'}
+        type={viewer?.type}
+        onClose={closeViewer}
+      />
     </div>
   );
 }

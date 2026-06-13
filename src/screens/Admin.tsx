@@ -1,38 +1,47 @@
 
-import React, { useState } from 'react';
-import { 
-  Users, 
-  TrendingUp, 
-  Search, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  api,
+  type AdminStats,
+  type AdminApplication,
+  type AgentSummary,
+  type ApplicationStatus,
+  type ApplicationTimelineEntry,
+} from '@/lib/api';
+import { swal } from '@/lib/swal';
+import {
+  Users,
+  Search,
   CheckCircle2,
   Eye,
   ShieldCheck,
-  FileText as FileIcon, 
-  Truck, 
-  Home, 
-  GraduationCap, 
-  Clock,
+  FileText as FileIcon,
+  GraduationCap,
   Plus,
   Trash2,
   FileCheck,
-  DollarSign,
-  Filter,
+  Mail,
+  Phone,
   ChevronDown,
-  XCircle
+  ChevronRight,
+  Loader2,
+  Clock,
+  CreditCard,
+  UserX,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -41,194 +50,211 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+} from '@/components/ui/dialog';
+import { PasswordField } from '@/components/PasswordField';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 
-const mockAgents = [
-  { id: 'agent-1', name: 'James Wilson', email: 'james@agent.com', studentsCount: 12 },
-  { id: 'agent-2', name: 'Sarah Parker', email: 'sarah@agent.com', studentsCount: 8 },
-  { id: 'agent-3', name: 'Michael Ross', email: 'michael@agent.com', studentsCount: 15 },
+const agentSchema = z.object({
+  name: z.string().trim().min(1, 'Agent name is required'),
+  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+type AgentFormValues = z.infer<typeof agentSchema>;
+
+const STAT_DEFS: { key: keyof AdminStats; label: string; icon: any; color: string; bg: string }[] = [
+  { key: 'students', label: 'Total Students', icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  { key: 'applications', label: 'Applications', icon: FileCheck, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  { key: 'universities', label: 'Universities', icon: GraduationCap, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+  { key: 'agents', label: 'Agents', icon: ShieldCheck, color: 'text-green-500', bg: 'bg-green-500/10' },
 ];
 
-const initialStudents = [
-  { id: '1', name: 'Alex Johnson', university: 'Oxford', status: 'Verification', progress: 65, date: '2024-03-20', agentId: 'agent-1' },
-  { id: '2', name: 'Maria Garcia', university: 'Imperial', status: 'Application', progress: 80, date: '2024-03-18', agentId: 'agent-2' },
-  { id: '3', name: 'Chen Wei', university: 'Manchester', status: 'Documents', progress: 40, date: '2024-03-22', agentId: null },
-  { id: '4', name: 'Sarah Miller', university: 'UCL', status: 'Payment', progress: 95, date: '2024-03-15', agentId: 'agent-1' },
-];
+const STATUS_ORDER: ApplicationStatus[] = ['PROFILE', 'DOCUMENTS', 'VERIFICATION', 'APPLICATION', 'PAYMENT', 'COMPLETED'];
+const statusProgress = (s: ApplicationStatus) => Math.round(((STATUS_ORDER.indexOf(s) + 1) / STATUS_ORDER.length) * 100);
+const nextStatus = (s: ApplicationStatus) => STATUS_ORDER[Math.min(STATUS_ORDER.indexOf(s) + 1, STATUS_ORDER.length - 1)];
 
-const partners = [
-  { id: 'p1', name: 'Royal Rahi Logistics', service: 'Logistics', status: 'Active', commissions: '£1,240' },
-  { id: 'p2', name: 'UniSafe Payments', service: 'Payments', status: 'Active', commissions: '£850' },
-  { id: 'p3', name: 'SkyHigh Travels', service: 'Ticketing', status: 'Reviewing', commissions: '£0' },
-  { id: 'p4', name: 'Student Comforts', service: 'Accommodation', status: 'Active', commissions: '£2,100' },
-];
+const statusBadge: Record<ApplicationStatus, string> = {
+  PROFILE: 'bg-muted text-muted-foreground hover:bg-muted',
+  DOCUMENTS: 'bg-slate-500/10 text-slate-500 hover:bg-slate-500/20',
+  VERIFICATION: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
+  APPLICATION: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20',
+  PAYMENT: 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20',
+  COMPLETED: 'bg-green-500/10 text-green-600 hover:bg-green-500/20',
+};
 
-const universitiesList = [
-  { id: 'u1', name: 'University of Oxford', location: 'Oxford, UK', students: 450, status: 'Active' },
-  { id: 'u2', name: 'Imperial College London', location: 'London, UK', students: 320, status: 'Active' },
-  { id: 'u3', name: 'University of Manchester', location: 'Manchester, UK', students: 280, status: 'Hidden' },
-  { id: 'u4', name: 'UCL', location: 'London, UK', students: 390, status: 'Active' },
-];
-
-const accommodationsList = [
-  { id: 'a1', name: 'Chapter Spitalfields', type: 'Studio/En-suite', price: '£350/pw', availability: 'High' },
-  { id: 'a2', name: 'Scrape Shoreditch', type: 'Shared Flat', price: '£280/pw', availability: 'Medium' },
-  { id: 'a3', name: 'Vita Student First Street', type: 'Studio', price: '£310/pw', availability: 'Low' },
-];
-
-const mockLoanApps = [
-  { id: 'LOAN-121', applicantName: 'John Doe', email: 'john@example.com', date: '2024-04-25', status: 'Pending', type: 'Education Loan' },
-  { id: 'LOAN-122', applicantName: 'Emma Watson', email: 'emma@test.com', date: '2024-04-20', status: 'Approved', type: 'Education Loan' },
-];
-
-const adminStats = [
-  { label: 'Total Students', value: '1,284', icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { label: 'Pending Verification', value: '42', icon: FileCheck, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  { label: 'Total Commissions', value: '£4,190', icon: DollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-  { label: 'Success Rate', value: '94%', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10' },
-];
-
-const docCategories = [
-  {
-    title: "Applicant Documents",
-    items: [
-      { name: "10th Marksheet", status: "Verified" },
-      { name: "12th Marksheet", status: "Verified" },
-      { name: "UG Degree/Transcripts", status: "Pending" },
-      { name: "Aadhar Card (Self)", status: "Verified" },
-      { name: "PAN Card (Self)", status: "Verified" },
-      { name: "Offer Letter", status: "Verified" },
-    ]
-  },
-  {
-    title: "Guarantor Documents",
-    items: [
-      { name: "Aadhar Card (Parent)", status: "Pending" },
-      { name: "PAN Card (Parent)", status: "Verified" },
-      { name: "Passport Photo", status: "Verified" },
-      { name: "6 Month Bank Statement", status: "Needs Review" },
-      { name: "ITR Last 3 Years", status: "Verified" },
-      { name: "Income Proof (Salary/Business)", status: "Verified" },
-    ]
-  },
-  {
-    title: "Co-Applicant Documents",
-    items: [
-      { name: "Aadhar Card", status: "Verified" },
-      { name: "PAN Card", status: "Verified" },
-      { name: "Passport Photo", status: "Verified" },
-    ]
-  }
-];
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
 export default function Admin() {
-  const [studentList, setStudentList] = useState(initialStudents);
-  const [agents, setAgents] = useState(mockAgents);
-  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<any>(null);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [apps, setApps] = useState<AdminApplication[]>([]);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
-  const [isStudentDetailsOpen, setIsStudentDetailsOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'All' | ApplicationStatus>('All');
 
-  const handleApprove = (id: string) => {
-    setStudentList(prev => prev.map(s => s.id === id ? { ...s, status: 'Application', progress: 85 } : s));
-  };
+  const [selected, setSelected] = useState<AdminApplication | null>(null);
+  const [timeline, setTimeline] = useState<ApplicationTimelineEntry[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
 
-  const handleReject = (id: string) => {
-    setStudentList(prev => prev.filter(s => s.id !== id));
-  };
+  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
+  const {
+    register: registerAgent,
+    handleSubmit: handleAgentSubmit,
+    reset: resetAgentForm,
+    formState: { errors: agentErrors, isSubmitting: savingAgent },
+  } = useForm<AgentFormValues>({
+    resolver: zodResolver(agentSchema),
+    mode: 'onTouched',
+    defaultValues: { name: '', email: '', password: '' },
+  });
 
-  const handleAddEditAgent = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      name: formData.get('name') as string,
-      email: formData.get('email') as string,
-    };
-
-    if (editingAgent) {
-      setAgents(prev => prev.map(a => a.id === editingAgent.id ? { ...a, ...data } : a));
-    } else {
-      const newAgent = {
-        id: `agent-${Date.now()}`,
-        ...data,
-        studentsCount: 0
-      };
-      setAgents(prev => [...prev, newAgent]);
+  const load = useCallback(async () => {
+    try {
+      const [s, a, ag] = await Promise.all([api.admin.stats(), api.admin.applications(), api.agents.list()]);
+      setStats(s);
+      setApps(a);
+      setAgents(ag);
+    } catch (e) {
+      console.error('Failed to load admin data', e);
+      swal.error('Could not load admin data. Is the backend running?');
+    } finally {
+      setLoading(false);
     }
-    setIsAgentDialogOpen(false);
-    setEditingAgent(null);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const refreshApps = async () => {
+    try {
+      const a = await api.admin.applications();
+      setApps(a);
+    } catch { /* ignore */ }
   };
 
-  const handleDeleteAgent = (id: string) => {
-    if (confirm('Are you sure you want to delete this agent?')) {
-      setAgents(prev => prev.filter(a => a.id !== id));
-      setStudentList(prev => prev.map(s => s.agentId === id ? { ...s, agentId: null } : s));
+  const handleAssignAgent = async (application: AdminApplication, agentId: string) => {
+    const next = agentId === 'unassigned' ? null : agentId;
+    // optimistic
+    const agentObj = next ? agents.find((a) => a.id === next) ?? null : null;
+    setApps((prev) =>
+      prev.map((a) => (a.id === application.id ? { ...a, agent: agentObj ? { id: agentObj.id, name: agentObj.name } : null } : a)),
+    );
+    try {
+      await api.admin.assignAgent(application.id, next);
+      // agent student counts change → refresh agents too
+      const ag = await api.agents.list();
+      setAgents(ag);
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not assign agent.');
+      refreshApps();
     }
   };
 
-  const handleAssignAgent = (studentId: string, agentId: string) => {
-    setStudentList(prev => prev.map(s => s.id === studentId ? { ...s, agentId: agentId === 'unassigned' ? null : agentId } : s));
+  const handleAdvance = async (application: AdminApplication) => {
+    const target = nextStatus(application.status);
+    if (target === application.status) {
+      swal.info('This application has already reached the final phase.');
+      return;
+    }
+    setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: target } : a)));
+    try {
+      await api.applications.setStatus(application.id, target);
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not update status.');
+      refreshApps();
+    }
   };
 
-  const filteredStudents = studentList.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.university.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || s.status === statusFilter;
+  const openDetails = async (application: AdminApplication) => {
+    setSelected(application);
+    setTimeline([]);
+    setTimelineLoading(true);
+    try {
+      setTimeline(await api.applications.timeline(application.id));
+    } catch { /* ignore */ } finally {
+      setTimelineLoading(false);
+    }
+  };
+
+  const onCreateAgent = async (values: AgentFormValues) => {
+    try {
+      await api.agents.create(values);
+      setIsAgentDialogOpen(false);
+      resetAgentForm({ name: '', email: '', password: '' });
+      const ag = await api.agents.list();
+      setAgents(ag);
+      swal.success('Agent onboarded successfully. They can now log in with the credentials you set.');
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not onboard agent.');
+    }
+  };
+
+  const handleDeleteAgent = async (agent: AgentSummary) => {
+    if (!(await swal.confirm('This removes the agent and unassigns their students.', { title: `Delete ${agent.name}?`, confirmText: 'Delete', variant: 'error' }))) return;
+    try {
+      await api.agents.remove(agent.id);
+      setAgents((prev) => prev.filter((a) => a.id !== agent.id));
+      refreshApps();
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not delete agent.');
+    }
+  };
+
+  const filteredApps = apps.filter((a) => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      a.student.name.toLowerCase().includes(q) ||
+      a.student.email.toLowerCase().includes(q) ||
+      a.universityName.toLowerCase().includes(q) ||
+      a.course.toLowerCase().includes(q);
+    const matchesStatus = statusFilter === 'All' || a.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const [applicantDocs, setApplicantDocs] = useState(docCategories);
-
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
-          <p className="text-muted-foreground">Comprehensive management of services, institutions, and applications.</p>
-        </div>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
+        <p className="text-muted-foreground">Manage student applications, assign agents, and grow your agent network.</p>
       </div>
 
+      {/* Stat cards — live from DB */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {adminStats.map((stat) => (
+        {STAT_DEFS.map((stat) => (
           <Card key={stat.label} className="border-none shadow-sm bg-card/50 backdrop-blur group hover:shadow-md transition-all">
             <CardContent className="p-6 flex flex-col items-center text-center gap-3">
-              <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner", stat.bg, stat.color)}>
+              <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner', stat.bg, stat.color)}>
                 <stat.icon className="w-7 h-7" />
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
-                <div className="flex items-center justify-center gap-2">
-                  <p className="text-3xl font-bold tracking-tight">{stat.value}</p>
-                  <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-500 hover:bg-green-500/20 border-none px-1.5 h-5">
-                    +12%
-                  </Badge>
-                </div>
+                <p className="text-3xl font-bold tracking-tight">{stats ? stats[stat.key] : '—'}</p>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Tabs defaultValue="students" className="space-y-6">
+      <Tabs defaultValue="applications" className="space-y-6">
         <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
           <TabsList className="bg-muted/50 p-1 inline-flex w-auto md:w-full justify-start md:justify-center min-w-max">
-            <TabsTrigger value="students" className="gap-2">
-              <Users className="w-4 h-4" /> Admission Queue
+            <TabsTrigger value="applications" className="gap-2">
+              <FileCheck className="w-4 h-4" /> Course Applications
             </TabsTrigger>
             <TabsTrigger value="agents" className="gap-2">
               <ShieldCheck className="w-4 h-4" /> Agent Network
@@ -236,44 +262,41 @@ export default function Admin() {
           </TabsList>
         </div>
 
-        <TabsContent value="students">
+        {/* ---------------- Applications ---------------- */}
+        <TabsContent value="applications">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <CardTitle>Application Queue</CardTitle>
-                  <CardDescription>Monitor and verify active student enrollment processes.</CardDescription>
+                  <CardTitle>Course Applications</CardTitle>
+                  <CardDescription>Every student application, with assigned agent and current phase.</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative w-full md:w-64">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Search applicants..." 
-                      className="pl-10 h-9" 
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search student, course, university..."
+                      className="pl-10 h-9"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
                   <DropdownMenu>
-                    <DropdownMenuTrigger 
-                      render={
-                        <Button variant="outline" size="sm" className="gap-2 h-9">
-                          <Filter className="w-4 h-4" />
-                          {statusFilter === 'All' ? 'Filter' : statusFilter}
-                          <ChevronDown className="w-3 h-3 opacity-50" />
-                        </Button>
-                      }
-                    />
+                    <DropdownMenuTrigger render={
+                      <Button variant="outline" size="sm" className="gap-2 h-9">
+                        {statusFilter === 'All' ? 'All Phases' : statusFilter}
+                        <ChevronDown className="w-3 h-3 opacity-50" />
+                      </Button>
+                    } />
                     <DropdownMenuContent align="end" className="w-[180px]">
                       <DropdownMenuGroup>
-                        <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                        <DropdownMenuLabel>Filter by Phase</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuRadioGroup value={statusFilter} onValueChange={setStatusFilter}>
-                          <DropdownMenuRadioItem value="All">All Statuses</DropdownMenuRadioItem>
-                          <DropdownMenuRadioItem value="Verification">Verification</DropdownMenuRadioItem>
-                          <DropdownMenuRadioItem value="Application">Application</DropdownMenuRadioItem>
-                          <DropdownMenuRadioItem value="Documents">Documents</DropdownMenuRadioItem>
-                          <DropdownMenuRadioItem value="Payment">Payment</DropdownMenuRadioItem>
+                        <DropdownMenuRadioGroup value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+                          <DropdownMenuRadioItem value="All">All Phases</DropdownMenuRadioItem>
+                          {STATUS_ORDER.map((s) => (
+                            <DropdownMenuRadioItem key={s} value={s}>{s}</DropdownMenuRadioItem>
+                          ))}
                         </DropdownMenuRadioGroup>
                       </DropdownMenuGroup>
                     </DropdownMenuContent>
@@ -286,7 +309,8 @@ export default function Admin() {
                 <Table>
                   <TableHeader className="bg-muted/10">
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[280px] px-6 text-center">Student Details</TableHead>
+                      <TableHead className="w-[260px] px-6">Student</TableHead>
+                      <TableHead>Application</TableHead>
                       <TableHead className="text-center">Agent</TableHead>
                       <TableHead className="text-center">Phase</TableHead>
                       <TableHead className="text-center">Progress</TableHead>
@@ -294,124 +318,151 @@ export default function Admin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((student) => {
-                        const assignedAgent = agents.find(a => a.id === student.agentId);
-                        
-                        return (
-                          <TableRow key={student.id} className="group">
-                            <TableCell className="font-medium px-6 py-4">
-                              <div className="flex items-center justify-center gap-3">
-                                <Avatar className="w-9 h-9 border-2 border-background shadow-sm">
-                                  <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`} />
-                                  <AvatarFallback>{student.name[0]}</AvatarFallback>
-                                </Avatar>
-                                <div className="flex flex-col items-start text-left">
-                                  <span className="text-sm font-semibold">{student.name}</span>
-                                  <span className="text-[10px] text-muted-foreground font-normal">ID: {student.id}9823</span>
-                                </div>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-40 text-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredApps.length > 0 ? (
+                      filteredApps.map((a) => (
+                        <TableRow key={a.id} className="group">
+                          <TableCell className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="w-9 h-9 border-2 border-background shadow-sm">
+                                <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${a.student.name}`} />
+                                <AvatarFallback>{a.student.name[0]?.toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold">{a.student.name}</span>
+                                <span className="text-[11px] text-muted-foreground">{a.student.email}</span>
                               </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger render={
-                                  <Button variant="ghost" size="sm" className={cn("h-8 gap-2 rounded-full", !assignedAgent && "text-red-500 bg-red-500/10")}>
-                                    <ShieldCheck className="w-3.5 h-3.5" />
-                                    {assignedAgent ? assignedAgent.name : 'Unassigned'}
-                                    <ChevronDown className="w-3 h-3 opacity-50" />
-                                  </Button>
-                                } />
-                                <DropdownMenuContent align="center" className="w-[200px]">
-                                  <DropdownMenuGroup>
-                                    <DropdownMenuLabel>Assign Agent</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuRadioGroup 
-                                      value={student.agentId || 'unassigned'}
-                                      onValueChange={(val) => handleAssignAgent(student.id, val)}
-                                    >
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">{a.universityName}</span>
+                              <span className="text-[11px] text-muted-foreground">{a.course}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger render={
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn(
+                                    'h-8 max-w-[170px] gap-2 rounded-full border transition-colors',
+                                    a.agent
+                                      ? 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
+                                      : 'border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/15',
+                                  )}
+                                >
+                                  {a.agent ? (
+                                    <Avatar className="h-5 w-5">
+                                      <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${a.agent.name}`} />
+                                      <AvatarFallback className="text-[9px]">{a.agent.name[0]?.toUpperCase()}</AvatarFallback>
+                                    </Avatar>
+                                  ) : (
+                                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                                  )}
+                                  <span className="truncate text-xs font-medium">{a.agent ? a.agent.name : 'Unassigned'}</span>
+                                  <ChevronDown className="w-3 h-3 shrink-0 opacity-50" />
+                                </Button>
+                              } />
+                              <DropdownMenuContent align="end" sideOffset={6} className="w-72 p-1.5 shadow-xl">
+                                <DropdownMenuGroup>
+                                <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  <ShieldCheck className="h-3.5 w-3.5" /> Assign an Agent
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {agents.length === 0 ? (
+                                  <div className="px-2 py-4 text-center">
+                                    <p className="text-xs text-muted-foreground">No agents yet.</p>
+                                    <p className="text-[11px] text-muted-foreground/70">Onboard one from the Agent Network tab.</p>
+                                  </div>
+                                ) : (
+                                  <DropdownMenuRadioGroup
+                                    value={a.agent?.id || 'unassigned'}
+                                    onValueChange={(val) => handleAssignAgent(a, val)}
+                                  >
+                                    <div className="max-h-64 overflow-y-auto">
                                       {agents.map((agent) => (
-                                        <DropdownMenuRadioItem 
-                                          key={agent.id} 
+                                        <DropdownMenuRadioItem
+                                          key={agent.id}
                                           value={agent.id}
-                                          className="text-xs"
+                                          className="gap-2.5 rounded-lg py-2 pr-9 pl-2 data-[checked]:bg-primary/5"
                                         >
-                                          {agent.name}
+                                          <Avatar className="h-7 w-7 shrink-0 border border-border">
+                                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agent.name}`} />
+                                            <AvatarFallback className="text-[10px]">{agent.name[0]?.toUpperCase()}</AvatarFallback>
+                                          </Avatar>
+                                          <div className="flex min-w-0 flex-col leading-tight">
+                                            <span className="truncate text-sm font-medium">{agent.name}</span>
+                                            <span className="truncate text-[11px] text-muted-foreground">
+                                              {agent.numberOfStudents} student{agent.numberOfStudents === 1 ? '' : 's'}
+                                            </span>
+                                          </div>
                                         </DropdownMenuRadioItem>
                                       ))}
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuRadioItem 
-                                        value="unassigned" 
-                                        className="text-xs text-destructive"
-                                      >
-                                        Unassign Agent
-                                      </DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                  </DropdownMenuGroup>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge 
-                                variant="secondary"
-                                className={cn(
-                                  "px-2 py-0 h-5 font-medium text-[10px] uppercase tracking-wider",
-                                  student.status === 'Verification' ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" :
-                                  student.status === 'Application' ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" :
-                                  student.status === 'Payment' ? "bg-green-500/10 text-green-500 hover:bg-green-500/20" :
-                                  "bg-muted text-muted-foreground hover:bg-muted"
+                                    </div>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuRadioItem
+                                      value="unassigned"
+                                      className="gap-2.5 rounded-lg py-2 pr-9 pl-2 text-destructive focus:bg-destructive/10 focus:text-destructive data-[checked]:bg-destructive/5"
+                                    >
+                                      <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-destructive/10">
+                                        <UserX className="h-3.5 w-3.5" />
+                                      </div>
+                                      <div className="flex flex-col leading-tight">
+                                        <span className="text-sm font-medium">Unassign agent</span>
+                                        <span className="text-[11px] text-destructive/70">Remove the current agent</span>
+                                      </div>
+                                    </DropdownMenuRadioItem>
+                                  </DropdownMenuRadioGroup>
                                 )}
+                                </DropdownMenuGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className={cn('px-2 py-0 h-5 font-medium text-[10px] uppercase tracking-wider', statusBadge[a.status])}>
+                              {a.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${statusProgress(a.status)}%` }} />
+                              </div>
+                              <span className="text-[10px] font-mono font-medium text-muted-foreground">{statusProgress(a.status)}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right px-6">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10 disabled:opacity-30"
+                                onClick={() => handleAdvance(a)}
+                                disabled={a.status === 'COMPLETED'}
+                                title="Advance to next phase"
                               >
-                                {student.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full bg-primary transition-all duration-1000" 
-                                    style={{ width: `${student.progress}%` }} 
-                                  />
-                                </div>
-                                <span className="text-[10px] font-mono font-medium text-muted-foreground">{student.progress}%</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right px-6">
-                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button 
-                                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10"
-                                  onClick={() => handleApprove(student.id)}
-                                  title="Approve"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </button>
-                                <button 
-                                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
-                                  onClick={() => handleReject(student.id)}
-                                  title="Reject"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-muted-foreground hover:bg-muted" 
-                                  title="Details"
-                                  onClick={() => {
-                                    setSelectedStudent(student);
-                                    setIsStudentDetailsOpen(true);
-                                  }}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
+                                <CheckCircle2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                                onClick={() => openDetails(a)}
+                                title="Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
                     ) : (
                       <TableRow>
                         <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
-                          No applications found matching "{searchQuery}"
+                          {apps.length === 0 ? 'No applications have been submitted yet.' : `No applications match "${searchQuery}".`}
                         </TableCell>
                       </TableRow>
                     )}
@@ -422,17 +473,18 @@ export default function Admin() {
           </Card>
         </TabsContent>
 
+        {/* ---------------- Agents ---------------- */}
         <TabsContent value="agents">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <CardTitle>Agent Network</CardTitle>
-                  <CardDescription>Onboard and manage agents who assist students with their applications.</CardDescription>
+                  <CardDescription>Onboard agents and see how many students each is handling.</CardDescription>
                 </div>
                 <Dialog open={isAgentDialogOpen} onOpenChange={(open) => {
                   setIsAgentDialogOpen(open);
-                  if (!open) setEditingAgent(null);
+                  if (!open) resetAgentForm({ name: '', email: '', password: '' });
                 }}>
                   <DialogTrigger render={
                     <Button className="gap-2">
@@ -441,23 +493,32 @@ export default function Admin() {
                   } />
                   <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                      <DialogTitle>{editingAgent ? 'Edit Agent Profile' : 'Onboard New Agent'}</DialogTitle>
+                      <DialogTitle>Onboard New Agent</DialogTitle>
                       <DialogDescription>
-                        Agents can bring their own students and help verify their documents.
+                        Creates a login for the agent. They can sign in with the email and password you set below.
                       </DialogDescription>
                     </DialogHeader>
-                    <form key={editingAgent?.id || 'new-agent-form'} onSubmit={handleAddEditAgent} className="space-y-4 pt-4">
-                      <div className="space-y-2">
+                    <form onSubmit={handleAgentSubmit(onCreateAgent)} noValidate className="space-y-4 pt-4">
+                      <div className="space-y-1.5">
                         <label className="text-sm font-medium">Agent Name</label>
-                        <Input name="name" defaultValue={editingAgent?.name} required placeholder="Full Name" />
+                        <Input {...registerAgent('name')} placeholder="Full Name" />
+                        {agentErrors.name && <p className="px-1 text-xs font-medium text-red-600">{agentErrors.name.message}</p>}
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         <label className="text-sm font-medium">Email Address</label>
-                        <Input name="email" type="email" defaultValue={editingAgent?.email} required placeholder="agent@example.com" />
+                        <Input type="email" {...registerAgent('email')} placeholder="agent@example.com" />
+                        {agentErrors.email && <p className="px-1 text-xs font-medium text-red-600">{agentErrors.email.message}</p>}
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Temporary Password</label>
+                        <PasswordField {...registerAgent('password')} placeholder="At least 8 characters" />
+                        {agentErrors.password && <p className="px-1 text-xs font-medium text-red-600">{agentErrors.password.message}</p>}
                       </div>
                       <div className="flex justify-end gap-3 pt-4">
                         <Button type="button" variant="outline" onClick={() => setIsAgentDialogOpen(false)}>Cancel</Button>
-                        <Button type="submit">{editingAgent ? 'Update Profile' : 'Onboard Agent'}</Button>
+                        <Button type="submit" disabled={savingAgent} className="gap-2">
+                          {savingAgent && <Loader2 className="w-4 h-4 animate-spin" />} Onboard Agent
+                        </Button>
                       </div>
                     </form>
                   </DialogContent>
@@ -468,55 +529,60 @@ export default function Admin() {
               <Table>
                 <TableHeader className="bg-muted/10">
                   <TableRow>
-                    <TableHead className="px-6">Agent Details</TableHead>
+                    <TableHead className="px-6">Agent</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead className="text-center">Active Students</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
                     <TableHead className="text-right px-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agents.map((agent) => (
-                    <TableRow key={agent.id}>
-                      <TableCell className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agent.name}`} />
-                            <AvatarFallback>{agent.name[0]}</AvatarFallback>
-                          </Avatar>
-                          <span className="font-semibold text-sm">{agent.name}</span>
-                        </div>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-32 text-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{agent.email}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="px-2 py-0.5">
-                          {studentList.filter(s => s.agentId === agent.id).length} Students
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right px-6">
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={() => {
-                              setEditingAgent(agent);
-                              setIsAgentDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                    </TableRow>
+                  ) : agents.length > 0 ? (
+                    agents.map((agent) => (
+                      <TableRow key={agent.id}>
+                        <TableCell className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agent.name}`} />
+                              <AvatarFallback>{agent.name[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span className="font-semibold text-sm">{agent.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{agent.email}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="px-2 py-0.5">{agent.numberOfStudents} Students</Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className={cn('text-[10px]', agent.status === 'ACTIVE' ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground')}>
+                            {agent.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right px-6">
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDeleteAgent(agent.id)}
+                            onClick={() => handleDeleteAgent(agent)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
-                        </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                        No agents yet. Use “Onboard Agent” to add your first one.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -524,120 +590,86 @@ export default function Admin() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isStudentDetailsOpen} onOpenChange={setIsStudentDetailsOpen}>
-        <DialogContent className="sm:max-w-5xl w-[98vw] h-[95vh] md:h-[85vh] bg-background/60 backdrop-blur-3xl border-white/10 shadow-2xl p-0 overflow-hidden flex flex-col gap-0 transition-all duration-500">
-          <div className="flex-none p-6 border-b bg-background/40 backdrop-blur-xl">
+      {/* ---------------- Application details ---------------- */}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent className="sm:max-w-3xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+          <div className="flex-none p-6 border-b bg-muted/20">
             <DialogHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shadow-inner">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <div className="flex flex-col items-start gap-1">
-                    <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight">
-                      Student Overview
-                    </DialogTitle>
-                    <DialogDescription className="text-sm md:text-base font-medium">
-                      Reviewing profile for <span className="text-foreground">{selectedStudent?.name}</span> • <span className="font-mono text-primary">ID: {selectedStudent?.id}9823</span>
-                    </DialogDescription>
-                  </div>
+              <div className="flex items-center gap-4">
+                <Avatar className="w-12 h-12">
+                  <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selected?.student.name}`} />
+                  <AvatarFallback>{selected?.student.name[0]?.toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col items-start gap-1">
+                  <DialogTitle className="text-xl font-bold tracking-tight">{selected?.student.name}</DialogTitle>
+                  <DialogDescription>
+                    {selected?.universityName} • {selected?.course}
+                  </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="md:col-span-1 space-y-6">
-                <Card className="border-none shadow-md overflow-hidden">
-                  <div className="h-32 bg-primary/10 relative">
-                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
-                      <Avatar className="w-24 h-24 border-4 border-background shadow-xl">
-                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedStudent?.name}`} />
-                        <AvatarFallback>{selectedStudent?.name?.[0]}</AvatarFallback>
-                      </Avatar>
-                    </div>
-                  </div>
-                  <div className="pt-12 pb-6 px-6 text-center">
-                    <h3 className="text-xl font-bold">{selectedStudent?.name}</h3>
-                    <p className="text-muted-foreground text-sm">{selectedStudent?.university}</p>
-                    <div className="mt-4">
-                      <Badge variant="secondary" className="capitalize">
-                        {selectedStudent?.status}
-                      </Badge>
-                    </div>
-                  </div>
-                </Card>
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Key facts */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <Fact icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={selected?.student.email ?? '—'} />
+              <Fact icon={<Phone className="w-3.5 h-3.5" />} label="Phone" value={selected?.student.phoneNumber || '—'} />
+              <Fact icon={<ShieldCheck className="w-3.5 h-3.5" />} label="Agent" value={selected?.agent?.name || 'Unassigned'} />
+              <Fact icon={<FileIcon className="w-3.5 h-3.5" />} label="Documents" value={`${selected?.student.documentCount ?? 0} uploaded`} />
+              <Fact icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Profile" value={selected?.student.isProfileCompleted ? `Complete (${selected?.student.profileCompletion}%)` : 'Incomplete'} />
+              <Fact icon={<CreditCard className="w-3.5 h-3.5" />} label="Payment" value={selected?.paymentStatus ?? '—'} />
+            </div>
 
-                <div className="space-y-4">
-                  <h4 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Assigned Agent</h4>
-                  {selectedStudent?.agentId ? (
-                    <div className="flex items-center gap-3 p-4 rounded-2xl bg-muted/30">
-                      <Avatar className="w-8 h-8">
-                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agents.find(a => a.id === selectedStudent?.agentId)?.name}`} />
-                        <AvatarFallback>A</AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">{agents.find(a => a.id === selectedStudent?.agentId)?.name}</span>
-                        <span className="text-[10px] text-muted-foreground">Premium Agent</span>
+            {selected && (
+              <div className="flex items-center gap-3">
+                <Badge variant="secondary" className={cn('uppercase tracking-wider', statusBadge[selected.status])}>{selected.status}</Badge>
+                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${statusProgress(selected.status)}%` }} />
+                </div>
+                <span className="text-xs font-mono text-muted-foreground">{statusProgress(selected.status)}%</span>
+              </div>
+            )}
+
+            {/* Timeline */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Activity Timeline</h3>
+              {timelineLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              ) : timeline.length > 0 ? (
+                <ol className="relative border-l border-border ml-2 space-y-4">
+                  {timeline.map((t) => (
+                    <li key={t.id} className="ml-4">
+                      <div className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full bg-primary" />
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className="w-3.5 h-3.5 text-primary" />
+                        <span className="text-sm font-medium">{t.action.replace(/_/g, ' ')}</span>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="p-4 rounded-2xl bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2">
-                       <ShieldCheck className="w-4 h-4" /> No Agent Assigned
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="md:col-span-2 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold">Verification Progress</h3>
-                  <span className="text-sm font-mono font-bold text-primary">{selectedStudent?.progress}%</span>
-                </div>
-                <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${selectedStudent?.progress}%` }} />
-                </div>
-
-                <div className="space-y-4 pt-4">
-                  <h3 className="text-lg font-bold">Documents Checklist</h3>
-                  <Accordion type="multiple" className="w-full space-y-3">
-                    {applicantDocs.map((category, catIdx) => (
-                      <AccordionItem key={catIdx} value={`student-cat-${catIdx}`} className="border rounded-xl px-4 bg-muted/10">
-                        <AccordionTrigger className="hover:no-underline py-3">
-                          <span className="font-bold text-sm">{category.title}</span>
-                        </AccordionTrigger>
-                        <AccordionContent className="pb-3">
-                          <div className="grid gap-2">
-                            {category.items.map((item, itemIdx) => (
-                              <div key={itemIdx} className="flex items-center justify-between p-3 bg-background rounded-lg border border-border/50">
-                                <div className="flex items-center gap-3">
-                                  <FileIcon className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm">{item.name}</span>
-                                </div>
-                                <Badge variant={item.status === 'Verified' ? 'default' : 'secondary'} className="text-[10px]">
-                                  {item.status}
-                                </Badge>
-                              </div>
-                            ))}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
-              </div>
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {fmtDate(t.createdAt)}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+              )}
             </div>
           </div>
 
-          <div className="p-6 border-t bg-background/60 backdrop-blur-xl flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setIsStudentDetailsOpen(false)}>Close</Button>
-            <Button className="gap-2" onClick={() => {
-               handleApprove(selectedStudent.id);
-               setIsStudentDetailsOpen(false);
-            }}>
-              <CheckCircle2 className="w-4 h-4" /> Move to Next Phase
-            </Button>
+          <div className="p-4 border-t bg-muted/20 flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
+            {selected && selected.status !== 'COMPLETED' && (
+              <Button
+                className="gap-2"
+                onClick={() => {
+                  handleAdvance(selected);
+                  setSelected(null);
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4" /> Advance to {nextStatus(selected.status)}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -645,3 +677,13 @@ export default function Admin() {
   );
 }
 
+function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-xl border bg-muted/20 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+        {icon} {label}
+      </div>
+      <p className="mt-1 text-sm font-medium break-words">{value}</p>
+    </div>
+  );
+}

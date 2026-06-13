@@ -17,24 +17,51 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { mockBlogPosts } from '@/mockData';
 import { BlogPost } from '@/types';
+import { api } from '@/lib/api';
 import { Link, useNavigate } from 'react-router-dom';
 import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Logo } from '@/components/Logo';
+import { AuthModal } from '@/components/AuthModal';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function Blog() {
   const navigate = useNavigate();
-  const { loginAsDummy } = useAuth();
+  const { user } = useAuth();
+  const [authOpen, setAuthOpen] = useState(false);
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [selectedBlog, setSelectedBlog] = useState<BlogPost | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('blog_posts');
-    setBlogs(saved ? JSON.parse(saved) : mockBlogPosts);
     window.scrollTo(0, 0);
+    (async () => {
+      try {
+        const posts = await api.blogs.list();
+        if (posts.length) {
+          setBlogs(
+            posts.map((b) => ({
+              id: b.id,
+              title: b.title,
+              slug: b.slug,
+              excerpt: b.excerpt,
+              content: b.content,
+              coverImage: b.coverImage,
+              author: b.author,
+              date: b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 10) : '',
+              category: b.category,
+              readTime: b.readTime,
+            })),
+          );
+        } else {
+          setBlogs(mockBlogPosts);
+        }
+      } catch (e) {
+        console.error('Failed to load blogs from API', e);
+        setBlogs(mockBlogPosts);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -42,10 +69,8 @@ export default function Blog() {
   }, [selectedBlog]);
 
   const handleConnect = () => {
-    if (loginAsDummy) {
-      loginAsDummy();
-      navigate('/dashboard');
-    }
+    if (user) navigate('/dashboard');
+    else setAuthOpen(true);
   };
 
   const Navigation = () => (
@@ -293,10 +318,15 @@ export default function Blog() {
         </main>
 
         <Footer />
-        <SettingsDialog 
-          open={settingsOpen} 
-          onOpenChange={setSettingsOpen} 
-          scope="home" 
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          scope="home"
+        />
+        <AuthModal
+          open={authOpen}
+          onClose={() => setAuthOpen(false)}
+          onSuccess={() => { setAuthOpen(false); navigate('/dashboard'); }}
         />
       </div>
     </ThemeScopeWrapper>

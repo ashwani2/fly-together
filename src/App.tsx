@@ -13,6 +13,7 @@ const LoanApplication = lazy(() => import('./screens/LoanApplication'));
 const Applications = lazy(() => import('./screens/Applications'));
 const Admin = lazy(() => import('./screens/Admin'));
 const AdminLogin = lazy(() => import('./screens/AdminLogin'));
+const ResetPassword = lazy(() => import('./screens/ResetPassword'));
 const AdminAccommodations = lazy(() => import('./screens/AdminAccommodations'));
 const AdminPartners = lazy(() => import('./screens/AdminPartners'));
 const AdminUniversities = lazy(() => import('./screens/AdminUniversities'));
@@ -26,12 +27,14 @@ const Agent = lazy(() => import('./screens/Agent'));
 
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
+import { SwalHost } from './lib/swal';
+import { LoadingScreen } from './components/LoadingScreen';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'student' | 'admin' | 'agent' }) {
   const { user, role: userRole, loading } = useAuth();
   const { pathname } = useLocation();
 
-  if (loading) return <div className="h-screen w-screen flex items-center justify-center">Loading...</div>;
+  if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/" />;
   
   if (!role && userRole === 'admin' && !pathname.includes('/admin')) {
@@ -55,11 +58,13 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <SwalHost />
         <Router>
-          <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center">Loading...</div>}>
+          <Suspense fallback={<LoadingScreen />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/admin-login" element={<AdminLogin />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/blog" element={<Blog />} />
               <Route path="/search" element={<SearchResults />} />
               <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>

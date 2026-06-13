@@ -18,6 +18,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
+import { api } from '@/lib/api';
+import { swal } from '@/lib/swal';
 
 const steps = [
   { id: 'applicant', title: 'Applicant Details', icon: User },
@@ -81,26 +83,33 @@ export default function LoanApplication() {
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, steps.length - 1));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 0));
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Save to localStorage so admin can see it
-    const newApplication = {
-      id: `LOAN-${Date.now()}`,
-      applicantName: user?.displayName || 'Test Student',
-      email: formData.applicant.email,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Pending',
-      type: 'Education Loan'
-    };
-    
-    const existingApplications = JSON.parse(localStorage.getItem('loan_applications') || '[]');
-    localStorage.setItem('loan_applications', JSON.stringify([...existingApplications, newApplication]));
+  const [submitting, setSubmitting] = useState(false);
 
-    // Simulate submission
-    setTimeout(() => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await api.loans.create({
+        amount: 'TBD',
+        details: {
+          type: 'Education Loan',
+          applicantName: user?.displayName || 'Student',
+          applicant: {
+            email: formData.applicant.email,
+            mobile: formData.applicant.mobile,
+            aadhar: formData.applicant.aadhar,
+            pan: formData.applicant.pan,
+          },
+          guarantor: { relation: formData.guarantor.relation, mobile: formData.guarantor.mobile },
+          coApplicant: { relation: formData.coApplicant.relation },
+        },
+      });
       setIsSubmitted(true);
-    }, 1500);
+    } catch (err: any) {
+      swal.error(err?.message || 'Could not submit loan application. Is the backend running?');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (isSubmitted) {
@@ -388,8 +397,8 @@ export default function LoanApplication() {
           <ChevronLeft className="w-4 h-4 mr-2" /> Previous
         </Button>
         {currentStep === steps.length - 1 ? (
-          <Button onClick={handleSubmit} className="px-8 bg-green-600 hover:bg-green-700">
-            Submit Application
+          <Button onClick={handleSubmit} disabled={submitting} className="px-8 bg-green-600 hover:bg-green-700">
+            {submitting ? 'Submitting…' : 'Submit Application'}
           </Button>
         ) : (
           <Button onClick={nextStep}>

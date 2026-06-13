@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { 
   GraduationCap, 
@@ -17,6 +17,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ThemeScopeWrapper } from '@/lib/ThemeContext';
+import { useAuth } from '@/lib/AuthContext';
+import { AuthModal } from '@/components/AuthModal';
+import { ApplicationPreview } from '@/components/ApplicationPreview';
+import { swal } from '@/lib/swal';
 
 interface Course {
   courseName: string;
@@ -40,10 +44,26 @@ export default function SearchResults() {
   const queryParams = new URLSearchParams(location.search);
   const initialQuery = queryParams.get('q') || '';
   
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [authOpen, setAuthOpen] = React.useState(false);
+  const [pending, setPending] = React.useState<{ universityName: string; course: string } | null>(null);
+  const [preview, setPreview] = React.useState<{ universityName: string; course: string } | null>(null);
   const [searchQuery, setSearchQuery] = React.useState(initialQuery);
   const [results, setResults] = React.useState<University[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // "Inquire Now": ensure login, then open the application preview (which validates + submits).
+  const handleInquire = (uni: University) => {
+    const p = { universityName: uni.universityName, course: uni.courses[0]?.courseName || 'General Studies' };
+    if (user) {
+      setPreview(p);
+    } else {
+      setPending(p);
+      setAuthOpen(true);
+    }
+  };
 
   const fetchResults = async (query: string) => {
     if (!query) return;
@@ -182,7 +202,7 @@ export default function SearchResults() {
                           </div>
                         </div>
                       </div>
-                      <Button className="w-full rounded-xl gap-2 font-bold shadow-lg shadow-primary/10 hover:shadow-primary/20">
+                      <Button onClick={() => handleInquire(uni)} className="w-full rounded-xl gap-2 font-bold shadow-lg shadow-primary/10 hover:shadow-primary/20">
                         Inquire Now <ExternalLink className="w-4 h-4" />
                       </Button>
                     </div>
@@ -215,6 +235,29 @@ export default function SearchResults() {
             ))}
           </div>
         </main>
+
+        <AuthModal
+          open={authOpen}
+          onClose={() => setAuthOpen(false)}
+          onSuccess={() => {
+            setAuthOpen(false);
+            if (pending) { setPreview(pending); setPending(null); }
+            else navigate('/dashboard');
+          }}
+          intent="Sign in to start your application"
+        />
+
+        <ApplicationPreview
+          open={!!preview}
+          universityName={preview?.universityName ?? ''}
+          course={preview?.course ?? ''}
+          onClose={() => setPreview(null)}
+          onSubmitted={() => {
+            setPreview(null);
+            swal.success('Your application has been submitted successfully.', 'Application submitted');
+            navigate('/dashboard/applications');
+          }}
+        />
       </div>
     </ThemeScopeWrapper>
   );

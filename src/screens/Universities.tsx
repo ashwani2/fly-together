@@ -1,16 +1,30 @@
 
-import React, { useState } from 'react';
-import { Search, Filter, Star, MapPin, GraduationCap, ArrowRight } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Star, MapPin, ArrowRight } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { mockUniversities } from '@/mockData';
+import { api, type University } from '@/lib/api';
 
 export default function Universities() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [universities, setUniversities] = useState<University[]>([]);
 
-  const filteredUnis = mockUniversities.filter(uni => 
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.universities.list();
+        setUniversities(list.length ? list : (mockUniversities as unknown as University[]));
+      } catch (e) {
+        console.error('Failed to load universities', e);
+        setUniversities(mockUniversities as unknown as University[]);
+      }
+    })();
+  }, []);
+
+  const filteredUnis = universities.filter(uni =>
     uni.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     uni.location.toLowerCase().includes(searchTerm.toLowerCase())
   );

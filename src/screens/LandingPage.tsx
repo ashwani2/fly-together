@@ -28,10 +28,12 @@ import { useAuth } from "@/lib/AuthContext";
 import { ThemeScopeWrapper } from "@/lib/ThemeContext";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Logo } from "@/components/Logo";
+import { AuthModal } from "@/components/AuthModal";
 import { Moon, Sun, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mockTestimonials, mockHomePartners } from "@/mockData";
 import { Testimonial, HomePartner } from "@/types";
+import { api } from "@/lib/api";
 import { AnimatePresence } from "motion/react";
 
 // Curated course/subject list used for the hero search typeahead.
@@ -89,11 +91,14 @@ const COURSE_SUGGESTIONS = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { loginAsDummy, loginAsAgentDummy } = useAuth();
+  const { user, loginAsAgentDummy } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [authOpen, setAuthOpen] = React.useState(false);
+  const [pendingDest, setPendingDest] = React.useState("/dashboard");
+  const [authIntent, setAuthIntent] = React.useState<string | undefined>(undefined);
   const [testimonialList, setTestimonialList] = React.useState<Testimonial[]>(
     () => {
       try {
@@ -114,21 +119,39 @@ export default function LandingPage() {
     }
   });
 
+  // Load testimonials + home partners from the backend (mock data is the first-paint fallback).
   React.useEffect(() => {
-    const updateLists = () => {
+    let active = true;
+    (async () => {
       try {
-        const savedT = localStorage.getItem("testimonials");
-        if (savedT) setTestimonialList(JSON.parse(savedT));
-
-        const savedP = localStorage.getItem("home_partners");
-        if (savedP) setPartnerList(JSON.parse(savedP));
-      } catch (e) {}
+        const [ts, ps] = await Promise.all([api.testimonials.list(), api.partners.list()]);
+        if (!active) return;
+        if (ts.length) {
+          setTestimonialList(
+            ts.map((t) => ({
+              id: t.id,
+              studentName: t.studentName,
+              universityName: t.universityName ?? undefined,
+              content: t.content,
+              mediaUrl: t.mediaUrl,
+              mediaType: t.mediaType === "VIDEO" ? "video" : "image",
+              avatarUrl: t.avatarUrl ?? undefined,
+              date: "",
+            })),
+          );
+        }
+        if (ps.length) {
+          setPartnerList(
+            ps.map((p) => ({ id: p.id, name: p.name, logo: p.imageUrl, redirectUrl: p.redirectionUrl })),
+          );
+        }
+      } catch (e) {
+        console.error("Failed to load home content from API", e);
+      }
+    })();
+    return () => {
+      active = false;
     };
-    updateLists();
-
-    // Listen for storage changes (for admin updates in other tabs)
-    window.addEventListener("storage", updateLists);
-    return () => window.removeEventListener("storage", updateLists);
   }, []);
 
   const [currentTestimonialIdx, setCurrentTestimonialIdx] = React.useState(0);
@@ -154,12 +177,18 @@ export default function LandingPage() {
     );
   };
 
-  const handleConnect = () => {
-    if (loginAsDummy) {
-      loginAsDummy();
-      navigate("/dashboard");
+  // Open the login/register modal — unless already signed in, in which case go straight there.
+  const openAuth = (dest: string, intent?: string) => {
+    if (user) {
+      navigate(dest);
+      return;
     }
+    setPendingDest(dest);
+    setAuthIntent(intent);
+    setAuthOpen(true);
   };
+
+  const handleConnect = () => openAuth("/dashboard");
 
   // Live course suggestions, shown once the user has typed at least 2 characters.
   const searchSuggestions = React.useMemo(() => {
@@ -888,9 +917,13 @@ export default function LandingPage() {
                   </li>
                   <li>
                     <button
-                      onClick={() => {
-                        loginAsAgentDummy?.();
-                        navigate("/dashboard/agent");
+                      onClick={async () => {
+                        try {
+                          await loginAsAgentDummy();
+                          navigate("/dashboard/agent");
+                        } catch (e) {
+                          console.error("Agent login failed", e);
+                        }
                       }}
                       className="hover:text-amber-500 transition-colors cursor-pointer text-left"
                     >
@@ -984,6 +1017,15 @@ export default function LandingPage() {
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           scope="home"
+        />
+        <AuthModal
+          open={authOpen}
+          onClose={() => setAuthOpen(false)}
+          onSuccess={() => {
+            setAuthOpen(false);
+            navigate(pendingDest);
+          }}
+          intent={authIntent}
         />
       </div>
     </ThemeScopeWrapper>

@@ -51,11 +51,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { api, type StudentProfile } from '@/lib/api';
+import { swal } from '@/lib/swal';
 
-const mockAgentStudents = [
-  { id: '1', name: 'Alex Johnson', university: 'Oxford', status: 'Verification', progress: 65, date: '2024-03-20', email: 'alex@example.com' },
-  { id: '3', name: 'Chen Wei', university: 'Manchester', status: 'Documents', progress: 40, date: '2024-03-22', email: 'chen@example.com' },
-];
+interface AgentStudentRow { id: string; name: string; university: string; status: string; progress: number; email: string }
+
+const rowFromProfile = (p: StudentProfile): AgentStudentRow => ({
+  id: p.id,
+  name: [p.firstName, p.lastName].filter(Boolean).join(' ') || 'Student',
+  university: '—',
+  status: p.isProfileVerified ? 'Verified' : p.isDocSubmitted ? 'Documents' : 'Verification',
+  progress: p.profileCompletion,
+  email: '',
+});
 
 const docCategories = [
   {
@@ -83,12 +91,35 @@ const docCategories = [
 ];
 
 export default function Agent() {
-  const [studentList, setStudentList] = useState(mockAgentStudents);
+  const [studentList, setStudentList] = useState<AgentStudentRow[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [selectedStudent, setSelectedStudent] = useState<AgentStudentRow | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [applicantDocs, setApplicantDocs] = useState(docCategories);
+
+  const load = async () => {
+    try {
+      const list = await api.agents.myStudents();
+      setStudentList(list.map(rowFromProfile));
+    } catch (e) {
+      console.error('Failed to load assigned students', e);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const confirmVerification = async () => {
+    if (!selectedStudent) return;
+    try {
+      await api.agents.verifyStudent(selectedStudent.id);
+      await load();
+      swal.success('Student profile verified. They have been marked as verified.');
+    } catch (e: any) {
+      swal.error(e?.message || 'Verification failed');
+    }
+    setIsReviewOpen(false);
+  };
 
   const updateDocStatus = (catIdx: number, itemIdx: number, newStatus: string) => {
     const newDocs = [...applicantDocs];
@@ -316,10 +347,7 @@ export default function Agent() {
 
           <div className="p-6 border-t flex justify-end gap-3 bg-muted/10">
             <Button variant="outline" onClick={() => setIsReviewOpen(false)}>Close</Button>
-            <Button onClick={() => {
-              alert('Documents verified successfully! Student has been notified.');
-              setIsReviewOpen(false);
-            }}>Confirm Verification</Button>
+            <Button onClick={confirmVerification}>Confirm Verification</Button>
           </div>
         </DialogContent>
       </Dialog>

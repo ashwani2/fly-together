@@ -22,12 +22,23 @@ import { Sidebar } from './Sidebar';
 import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { mockNotifications } from '@/mockData';
 import { useAuth } from '@/lib/AuthContext';
-import { logout } from '@/lib/firebase';
+import { api } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 
 export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
-  const { user, role } = useAuth();
+  const { user, role, logout } = useAuth();
   const navigate = useNavigate();
+  const [firstName, setFirstName] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (role !== 'student') return;
+    let active = true;
+    api.students
+      .me()
+      .then((p) => { if (active && p.firstName) setFirstName(p.firstName); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [role]);
 
   const handleLogout = async () => {
     await logout();
@@ -37,7 +48,8 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
   const displayName = user?.displayName || 'User';
   const displayEmail = user?.email || '';
   const photoURL = user?.photoURL || '';
-  const userInitials = displayName.split(' ').map(n => n[0]).join('').toUpperCase();
+  const displayFirst = firstName || displayName.split(' ')[0] || 'User';
+  const userInitials = (firstName || displayName).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 px-4 md:px-6 flex items-center justify-between">
@@ -101,13 +113,13 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
 
         <DropdownMenu>
           <DropdownMenuTrigger render={
-            <Button variant="ghost" className="gap-2 px-2">
+            <Button variant="ghost" className="h-auto gap-2 rounded-full py-1.5 pl-1.5 pr-3 transition-colors hover:bg-muted">
               <Avatar className="w-8 h-8">
                 <AvatarImage src={photoURL} />
                 <AvatarFallback>{userInitials}</AvatarFallback>
               </Avatar>
               <div className="text-left hidden md:block">
-                <p className="text-sm font-medium leading-none">{displayName}</p>
+                <p className="text-sm font-medium leading-none">{displayFirst}</p>
                 <p className="text-xs text-muted-foreground mt-1 capitalize">{role || 'Student'}</p>
               </div>
             </Button>

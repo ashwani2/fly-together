@@ -1,11 +1,12 @@
 
-import React from 'react';
-import { ShoppingBag, Home, Plane, CreditCard, Truck, Star, ArrowRight } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import React, { useEffect, useState } from 'react';
+import { Home, Plane, CreditCard, Truck, Star, ArrowRight, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { mockServices } from '@/mockData';
 import { cn } from '@/lib/utils';
+import { api, type ServiceCategory } from '@/lib/api';
 
 const categories = [
   { icon: Home, label: 'Accommodation', color: 'bg-blue-500' },
@@ -14,7 +15,52 @@ const categories = [
   { icon: Truck, label: 'Royal Rahi Logistics', color: 'bg-amber-500' },
 ];
 
+const CATEGORY_LABEL: Record<ServiceCategory, string> = {
+  ACCOMMODATION: 'Accommodation',
+  TICKET_BOOKING: 'Ticket Booking',
+  LOANS: 'Loans',
+  LOGISTICS: 'Logistics',
+  ONLINE_PAYMENT: 'Online Payment',
+};
+
+interface ServiceCard {
+  id: string;
+  name: string;
+  category: string;
+  rating: number;
+  price: string;
+  image: string;
+  description: string;
+}
+
 export default function Marketplace() {
+  const [services, setServices] = useState<ServiceCard[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.serviceProviders.list();
+        setServices(
+          list.map((s) => ({
+            id: s.id,
+            name: s.name,
+            category: CATEGORY_LABEL[s.category],
+            rating: s.rating,
+            price: s.price,
+            image: s.image,
+            description: s.description,
+          })),
+        );
+      } catch (e) {
+        console.error('Failed to load services', e);
+        setServices(mockServices as unknown as ServiceCard[]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   return (
     <div className="space-y-10">
       <div className="space-y-1">
@@ -42,8 +88,12 @@ export default function Marketplace() {
           <Button variant="ghost" className="text-primary">View all partners</Button>
         </div>
 
+        {loading && (
+          <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {mockServices.map((service) => (
+          {services.map((service) => (
             <Card key={service.id} className="overflow-hidden group border-muted/60">
               <div className="relative h-48 overflow-hidden">
                 <img 

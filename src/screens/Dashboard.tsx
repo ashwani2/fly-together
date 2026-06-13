@@ -22,6 +22,7 @@ import { mockStudent, mockNotifications } from '@/mockData';
 import { ApplicationStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
+import { api } from '@/lib/api';
 import { Navigate, Link } from 'react-router-dom';
 
 const steps: { label: ApplicationStatus; icon: any }[] = [
@@ -41,69 +42,33 @@ const quickServices = [
 
 export default function Dashboard() {
   const { role, user } = useAuth();
-  
+  const [firstName, setFirstName] = React.useState<string>(() => user?.displayName?.split(' ')[0] ?? '');
+
+  React.useEffect(() => {
+    if (role !== 'student') return;
+    let active = true;
+    api.students
+      .me()
+      .then((p) => {
+        if (active && p.firstName) setFirstName(p.firstName);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [role]);
+
   if (role === 'admin') {
     return <Navigate to="/dashboard/admin" replace />;
   }
 
-  const currentStepIndex = steps.findIndex(s => s.label === mockStudent.status);
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Welcome back, {mockStudent.name.split(' ')[0]}!</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome back, {firstName || 'there'}!</h1>
         <p className="text-muted-foreground">Here's what's happening with your study abroad journey.</p>
       </div>
-
-      {/* Progress Tracker */}
-      <Card className="border-none shadow-sm bg-primary/5">
-        <CardContent className="p-8">
-          <div className="flex items-center justify-between mb-8">
-            <div className="space-y-1">
-              <h2 className="text-xl font-semibold">Application Progress</h2>
-              <p className="text-sm text-muted-foreground">You are currently at the <span className="text-primary font-medium">{mockStudent.status}</span> stage.</p>
-            </div>
-            <div className="text-right">
-              <span className="text-2xl font-bold text-primary">{mockStudent.progress}%</span>
-              <p className="text-xs text-muted-foreground">Overall Completion</p>
-            </div>
-          </div>
-          
-          <Progress value={mockStudent.progress} className="h-3 mb-10" />
-
-          <div className="relative flex justify-between">
-            {steps.map((step, idx) => {
-              const isCompleted = idx < currentStepIndex;
-              const isCurrent = idx === currentStepIndex;
-              
-              return (
-                <div key={step.label} className="flex flex-col items-center gap-3 relative z-10 group">
-                  <div className={cn(
-                    "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-300 border-2",
-                    isCompleted ? "bg-primary border-primary text-primary-foreground" : 
-                    isCurrent ? "bg-background border-primary text-primary shadow-lg scale-110" : 
-                    "bg-background border-muted text-muted-foreground"
-                  )}>
-                    {isCompleted ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <step.icon className="w-5 h-5 md:w-6 md:h-6" />}
-                  </div>
-                  <span className={cn(
-                    "text-[10px] md:text-xs font-medium transition-colors hidden sm:block",
-                    isCurrent ? "text-primary" : "text-muted-foreground"
-                  )}>
-                    {step.label}
-                  </span>
-                </div>
-              );
-            })}
-            {/* Connector Line */}
-            <div className="absolute top-5 md:top-6 left-0 w-full h-[2px] bg-muted -z-0" />
-            <div 
-              className="absolute top-5 md:top-6 left-0 h-[2px] bg-primary transition-all duration-500 -z-0" 
-              style={{ width: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
-            />
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Popular Services Section */}
       <div className="space-y-4">
