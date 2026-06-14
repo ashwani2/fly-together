@@ -1,0 +1,6 @@
+import{al as i,aZ as s,aI as e}from"./index-FQHmJzqB.js";import{E as d}from"./eye-off-xFxrc5uN.js";import{E as c}from"./eye-BYa-BNv-.js";/**
+ * @license lucide-react v0.546.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const l=[["rect",{width:"18",height:"11",x:"3",y:"11",rx:"2",ry:"2",key:"1w4ew1"}],["path",{d:"M7 11V7a5 5 0 0 1 10 0v4",key:"fwvmzm"}]],m=i("lock",l),f=s.forwardRef(function(t,o){const[r,a]=s.useState(!1);return e.jsxs("div",{className:"flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10 transition-all",children:[e.jsx(m,{className:"h-4 w-4 shrink-0 text-muted-foreground"}),e.jsx("input",{ref:o,...t,type:r?"text":"password",className:"w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"}),e.jsx("button",{type:"button",onClick:()=>a(n=>!n),tabIndex:-1,"aria-label":r?"Hide password":"Show password",className:"shrink-0 text-muted-foreground transition-colors hover:text-foreground",children:r?e.jsx(d,{className:"h-4 w-4"}):e.jsx(c,{className:"h-4 w-4"})})]})});export{f as P};

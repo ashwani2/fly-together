@@ -4,15 +4,20 @@ import {
   api,
   type AdminStats,
   type AdminApplication,
+  type AdminStudentSummary,
+  type AdminStudentDetail,
   type AgentSummary,
   type ApplicationStatus,
   type ApplicationTimelineEntry,
 } from '@/lib/api';
+import { Progress } from '@/components/ui/progress';
+import { DocumentViewer } from '@/components/DocumentViewer';
 import { swal } from '@/lib/swal';
 import {
   Users,
   Search,
   CheckCircle2,
+  XCircle,
   Eye,
   ShieldCheck,
   FileText as FileIcon,
@@ -28,6 +33,10 @@ import {
   Clock,
   CreditCard,
   UserX,
+  FileSearch,
+  BadgeCheck,
+  CalendarDays,
+  MapPin,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -51,7 +60,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import {
@@ -81,21 +89,80 @@ const STAT_DEFS: { key: keyof AdminStats; label: string; icon: any; color: strin
   { key: 'agents', label: 'Agents', icon: ShieldCheck, color: 'text-green-500', bg: 'bg-green-500/10' },
 ];
 
-const STATUS_ORDER: ApplicationStatus[] = ['PROFILE', 'DOCUMENTS', 'VERIFICATION', 'APPLICATION', 'PAYMENT', 'COMPLETED'];
-const statusProgress = (s: ApplicationStatus) => Math.round(((STATUS_ORDER.indexOf(s) + 1) / STATUS_ORDER.length) * 100);
-const nextStatus = (s: ApplicationStatus) => STATUS_ORDER[Math.min(STATUS_ORDER.indexOf(s) + 1, STATUS_ORDER.length - 1)];
+const STATUS_ORDER: ApplicationStatus[] = [
+  'CREATED',
+  'DOCUMENT_VERIFIED',
+  'SENT_TO_UNIVERSITY',
+  'PENDING_WITH_UNIVERSITY',
+  'VERIFIED_BY_UNIVERSITY',
+  'PAYMENT_PENDING',
+  'COMPLETED',
+];
+
+const STATUS_LABELS: Record<ApplicationStatus, string> = {
+  CREATED: 'Created',
+  REJECTED: 'Rejected',
+  DOCUMENT_VERIFIED: 'Document Verified',
+  SENT_TO_UNIVERSITY: 'Sent to University',
+  PENDING_WITH_UNIVERSITY: 'Pending with University',
+  VERIFIED_BY_UNIVERSITY: 'Verified by University',
+  PAYMENT_PENDING: 'Payment Pending',
+  COMPLETED: 'Completed',
+};
+
+const statusProgress = (s: ApplicationStatus) => {
+  if (s === 'REJECTED') return 0;
+  const idx = STATUS_ORDER.indexOf(s);
+  if (idx === -1) return 0;
+  return Math.round(((idx + 1) / STATUS_ORDER.length) * 100);
+};
+
+const nextStatus = (s: ApplicationStatus): ApplicationStatus | null => {
+  const idx = STATUS_ORDER.indexOf(s);
+  if (idx === -1 || idx === STATUS_ORDER.length - 1) return null;
+  return STATUS_ORDER[idx + 1];
+};
 
 const statusBadge: Record<ApplicationStatus, string> = {
-  PROFILE: 'bg-muted text-muted-foreground hover:bg-muted',
-  DOCUMENTS: 'bg-slate-500/10 text-slate-500 hover:bg-slate-500/20',
-  VERIFICATION: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
-  APPLICATION: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20',
-  PAYMENT: 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20',
+  CREATED: 'bg-muted text-muted-foreground hover:bg-muted',
+  REJECTED: 'bg-red-500/10 text-red-600 hover:bg-red-500/20',
+  DOCUMENT_VERIFIED: 'bg-teal-500/10 text-teal-600 hover:bg-teal-500/20',
+  SENT_TO_UNIVERSITY: 'bg-sky-500/10 text-sky-600 hover:bg-sky-500/20',
+  PENDING_WITH_UNIVERSITY: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
+  VERIFIED_BY_UNIVERSITY: 'bg-purple-500/10 text-purple-600 hover:bg-purple-500/20',
+  PAYMENT_PENDING: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20',
   COMPLETED: 'bg-green-500/10 text-green-600 hover:bg-green-500/20',
 };
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+const AVATAR_COLORS = [
+  'bg-rose-500', 'bg-pink-500', 'bg-fuchsia-500', 'bg-purple-500',
+  'bg-violet-500', 'bg-indigo-500', 'bg-blue-500', 'bg-sky-500',
+  'bg-cyan-500', 'bg-teal-500', 'bg-emerald-500', 'bg-green-500',
+  'bg-lime-500', 'bg-yellow-500', 'bg-amber-500', 'bg-orange-500',
+];
+
+function nameInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (parts[0]?.[0] ?? '?').toUpperCase();
+}
+
+function avatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function InitialsAvatar({ name, className }: { name: string; className?: string }) {
+  return (
+    <div className={cn('flex items-center justify-center rounded-full text-white font-bold text-sm select-none shrink-0', avatarColor(name), className)}>
+      {nameInitials(name)}
+    </div>
+  );
+}
 
 export default function Admin() {
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -109,6 +176,26 @@ export default function Admin() {
   const [selected, setSelected] = useState<AdminApplication | null>(null);
   const [timeline, setTimeline] = useState<ApplicationTimelineEntry[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+
+  const [rejectTarget, setRejectTarget] = useState<AdminApplication | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+
+  const [paymentLinkTarget, setPaymentLinkTarget] = useState<AdminApplication | null>(null);
+  const [paymentLink, setPaymentLink] = useState('');
+  const [savingPaymentLink, setSavingPaymentLink] = useState(false);
+
+  // Student list dialog
+  const [studentListOpen, setStudentListOpen] = useState(false);
+  const [studentList, setStudentList] = useState<AdminStudentSummary[]>([]);
+  const [studentListLoading, setStudentListLoading] = useState(false);
+  const [studentSearch, setStudentSearch] = useState('');
+
+  // Student detail dialog
+  const [studentDetail, setStudentDetail] = useState<AdminStudentDetail | null>(null);
+  const [studentDetailLoading, setStudentDetailLoading] = useState(false);
+  const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
+  const [docViewer, setDocViewer] = useState<{ url: string; title: string; type: string } | null>(null);
 
   const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
   const {
@@ -167,16 +254,70 @@ export default function Admin() {
 
   const handleAdvance = async (application: AdminApplication) => {
     const target = nextStatus(application.status);
-    if (target === application.status) {
+    if (!target) {
       swal.info('This application has already reached the final phase.');
+      return;
+    }
+    // Advancing to PAYMENT_PENDING requires a payment link first.
+    if (target === 'PAYMENT_PENDING') {
+      setPaymentLinkTarget(application);
+      setPaymentLink('');
       return;
     }
     setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: target } : a)));
     try {
       await api.applications.setStatus(application.id, target);
+      // When marking COMPLETED, also close out the payment status.
+      if (target === 'COMPLETED') {
+        await api.applications.setPayment(application.id, 'COMPLETED', application.paymentLink ?? undefined);
+        setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, paymentStatus: 'COMPLETED' } : a)));
+      }
     } catch (e: any) {
       swal.error(e?.message || 'Could not update status.');
       refreshApps();
+    }
+  };
+
+  const submitPaymentLink = async () => {
+    if (!paymentLinkTarget || !paymentLink.trim()) return;
+    setSavingPaymentLink(true);
+    try {
+      await api.applications.setStatus(paymentLinkTarget.id, 'PAYMENT_PENDING');
+      await api.applications.setPayment(paymentLinkTarget.id, 'PENDING', paymentLink.trim());
+      setApps((prev) =>
+        prev.map((a) =>
+          a.id === paymentLinkTarget.id
+            ? { ...a, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: paymentLink.trim(), paymentStatus: 'PENDING' }
+            : a,
+        ),
+      );
+      setPaymentLinkTarget(null);
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not save payment link.');
+    } finally {
+      setSavingPaymentLink(false);
+    }
+  };
+
+  const openReject = (application: AdminApplication) => {
+    setRejectTarget(application);
+    setRejectReason('');
+  };
+
+  const submitReject = async () => {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    setRejecting(true);
+    try {
+      await api.applications.setStatus(rejectTarget.id, 'REJECTED', rejectReason.trim());
+      setApps((prev) =>
+        prev.map((a) => a.id === rejectTarget.id ? { ...a, status: 'REJECTED' as ApplicationStatus, rejectionReason: rejectReason.trim() } : a),
+      );
+      if (selected?.id === rejectTarget.id) setSelected((s) => s ? { ...s, status: 'REJECTED', rejectionReason: rejectReason.trim() } : s);
+      setRejectTarget(null);
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not reject application.');
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -215,6 +356,48 @@ export default function Admin() {
     }
   };
 
+  const openStudentList = async () => {
+    setStudentListOpen(true);
+    setStudentSearch('');
+    if (studentList.length) return;
+    setStudentListLoading(true);
+    try { setStudentList(await api.admin.students()); }
+    catch { swal.error('Could not load students.'); }
+    finally { setStudentListLoading(false); }
+  };
+
+  const openStudentDetail = async (s: AdminStudentSummary) => {
+    setStudentDetail(null);
+    closeDocViewer();
+    setStudentDetailLoading(true);
+    try { setStudentDetail(await api.admin.studentDetail(s.id)); }
+    catch { swal.error('Could not load student details.'); }
+    finally { setStudentDetailLoading(false); }
+  };
+
+  const closeDocViewer = () => {
+    setDocViewer((v) => { if (v) URL.revokeObjectURL(v.url); return null; });
+  };
+
+  const previewDoc = async (doc: { id: string; docUrl: string; docType: string }, studentId: string) => {
+    setLoadingDocId(doc.id);
+    try {
+      const { url } = await api.admin.studentDocumentUrl(studentId, doc.id);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Could not load document.');
+      const blob = await resp.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      setDocViewer((prev) => { if (prev) URL.revokeObjectURL(prev.url); return { url: objectUrl, title: doc.docType.replace(/_/g, ' '), type: blob.type }; });
+    } catch (e: any) { swal.error(e?.message ?? 'Could not load document.'); }
+    finally { setLoadingDocId(null); }
+  };
+
+  const filteredStudents = studentList.filter((s) => {
+    const q = studentSearch.toLowerCase();
+    const name = [s.firstName, s.lastName].filter(Boolean).join(' ');
+    return name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+  });
+
   const filteredApps = apps.filter((a) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -235,19 +418,30 @@ export default function Admin() {
 
       {/* Stat cards — live from DB */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {STAT_DEFS.map((stat) => (
-          <Card key={stat.label} className="border-none shadow-sm bg-card/50 backdrop-blur group hover:shadow-md transition-all">
-            <CardContent className="p-6 flex flex-col items-center text-center gap-3">
-              <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner', stat.bg, stat.color)}>
-                <stat.icon className="w-7 h-7" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
-                <p className="text-3xl font-bold tracking-tight">{stats ? stats[stat.key] : '—'}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {STAT_DEFS.map((stat) => {
+          const clickable = stat.key === 'students';
+          return (
+            <Card
+              key={stat.label}
+              onClick={clickable ? openStudentList : undefined}
+              className={cn(
+                'border-none shadow-sm bg-card/50 backdrop-blur group hover:shadow-md transition-all',
+                clickable && 'cursor-pointer hover:ring-2 hover:ring-primary/30',
+              )}
+            >
+              <CardContent className="p-6 flex flex-col items-center text-center gap-3">
+                <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner', stat.bg, stat.color)}>
+                  <stat.icon className="w-7 h-7" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                  <p className="text-3xl font-bold tracking-tight">{stats ? stats[stat.key] : '—'}</p>
+                  {clickable && <p className="text-[11px] text-primary/70 font-medium">Click to view</p>}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <Tabs defaultValue="applications" className="space-y-6">
@@ -284,18 +478,18 @@ export default function Admin() {
                   <DropdownMenu>
                     <DropdownMenuTrigger render={
                       <Button variant="outline" size="sm" className="gap-2 h-9">
-                        {statusFilter === 'All' ? 'All Phases' : statusFilter}
+                        {statusFilter === 'All' ? 'All Phases' : STATUS_LABELS[statusFilter as ApplicationStatus]}
                         <ChevronDown className="w-3 h-3 opacity-50" />
                       </Button>
                     } />
-                    <DropdownMenuContent align="end" className="w-[180px]">
+                    <DropdownMenuContent align="end" className="w-[220px]">
                       <DropdownMenuGroup>
                         <DropdownMenuLabel>Filter by Phase</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuRadioGroup value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
                           <DropdownMenuRadioItem value="All">All Phases</DropdownMenuRadioItem>
-                          {STATUS_ORDER.map((s) => (
-                            <DropdownMenuRadioItem key={s} value={s}>{s}</DropdownMenuRadioItem>
+                          {([...STATUS_ORDER, 'REJECTED'] as ApplicationStatus[]).map((s) => (
+                            <DropdownMenuRadioItem key={s} value={s}>{STATUS_LABELS[s]}</DropdownMenuRadioItem>
                           ))}
                         </DropdownMenuRadioGroup>
                       </DropdownMenuGroup>
@@ -329,10 +523,7 @@ export default function Admin() {
                         <TableRow key={a.id} className="group">
                           <TableCell className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <Avatar className="w-9 h-9 border-2 border-background shadow-sm">
-                                <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${a.student.name}`} />
-                                <AvatarFallback>{a.student.name[0]?.toUpperCase()}</AvatarFallback>
-                              </Avatar>
+                              <InitialsAvatar name={a.student.name} className="w-9 h-9" />
                               <div className="flex flex-col">
                                 <span className="text-sm font-semibold">{a.student.name}</span>
                                 <span className="text-[11px] text-muted-foreground">{a.student.email}</span>
@@ -359,10 +550,7 @@ export default function Admin() {
                                   )}
                                 >
                                   {a.agent ? (
-                                    <Avatar className="h-5 w-5">
-                                      <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${a.agent.name}`} />
-                                      <AvatarFallback className="text-[9px]">{a.agent.name[0]?.toUpperCase()}</AvatarFallback>
-                                    </Avatar>
+                                    <InitialsAvatar name={a.agent.name} className="h-5 w-5 text-[8px]" />
                                   ) : (
                                     <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                                   )}
@@ -393,10 +581,7 @@ export default function Admin() {
                                           value={agent.id}
                                           className="gap-2.5 rounded-lg py-2 pr-9 pl-2 data-[checked]:bg-primary/5"
                                         >
-                                          <Avatar className="h-7 w-7 shrink-0 border border-border">
-                                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agent.name}`} />
-                                            <AvatarFallback className="text-[10px]">{agent.name[0]?.toUpperCase()}</AvatarFallback>
-                                          </Avatar>
+                                          <InitialsAvatar name={agent.name} className="h-7 w-7 text-[10px]" />
                                           <div className="flex min-w-0 flex-col leading-tight">
                                             <span className="truncate text-sm font-medium">{agent.name}</span>
                                             <span className="truncate text-[11px] text-muted-foreground">
@@ -426,14 +611,17 @@ export default function Admin() {
                             </DropdownMenu>
                           </TableCell>
                           <TableCell className="text-center">
-                            <Badge variant="secondary" className={cn('px-2 py-0 h-5 font-medium text-[10px] uppercase tracking-wider', statusBadge[a.status])}>
-                              {a.status}
+                            <Badge variant="secondary" className={cn('px-2 py-0.5 h-auto font-medium text-[10px] tracking-wide whitespace-nowrap', statusBadge[a.status])}>
+                              {STATUS_LABELS[a.status]}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-2">
                               <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                                <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${statusProgress(a.status)}%` }} />
+                                <div
+                                  className={cn('h-full transition-all duration-1000', a.status === 'REJECTED' ? 'bg-red-500' : 'bg-primary')}
+                                  style={{ width: `${statusProgress(a.status)}%` }}
+                                />
                               </div>
                               <span className="text-[10px] font-mono font-medium text-muted-foreground">{statusProgress(a.status)}%</span>
                             </div>
@@ -443,10 +631,18 @@ export default function Admin() {
                               <button
                                 className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10 disabled:opacity-30"
                                 onClick={() => handleAdvance(a)}
-                                disabled={a.status === 'COMPLETED'}
+                                disabled={a.status === 'COMPLETED' || a.status === 'REJECTED' || !nextStatus(a.status)}
                                 title="Advance to next phase"
                               >
                                 <CheckCircle2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-red-500 hover:bg-red-500/10 disabled:opacity-30"
+                                onClick={() => openReject(a)}
+                                disabled={a.status === 'COMPLETED' || a.status === 'REJECTED'}
+                                title="Reject application"
+                              >
+                                <XCircle className="w-4 h-4" />
                               </button>
                               <button
                                 className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
@@ -548,10 +744,7 @@ export default function Admin() {
                       <TableRow key={agent.id}>
                         <TableCell className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${agent.name}`} />
-                              <AvatarFallback>{agent.name[0]?.toUpperCase()}</AvatarFallback>
-                            </Avatar>
+                            <InitialsAvatar name={agent.name} className="h-8 w-8 text-xs" />
                             <span className="font-semibold text-sm">{agent.name}</span>
                           </div>
                         </TableCell>
@@ -590,16 +783,258 @@ export default function Admin() {
         </TabsContent>
       </Tabs>
 
+      {/* ---------------- Student list dialog ---------------- */}
+      <Dialog open={studentListOpen} onOpenChange={(o) => { setStudentListOpen(o); if (!o) setStudentSearch(''); }}>
+        <DialogContent className="sm:max-w-2xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+          <div className="flex-none p-6 border-b bg-muted/20">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Users className="w-5 h-5" /> All Students</DialogTitle>
+              <DialogDescription>Click any student to view their full profile and documents.</DialogDescription>
+            </DialogHeader>
+            <div className="relative mt-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                placeholder="Search by name or email..."
+                className="w-full pl-10 pr-4 h-10 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {studentListLoading ? (
+              <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : filteredStudents.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-16">
+                {studentSearch ? `No students match "${studentSearch}".` : 'No students yet.'}
+              </p>
+            ) : (
+              filteredStudents.map((s) => {
+                const name = [s.firstName, s.lastName].filter(Boolean).join(' ') || s.email;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => openStudentDetail(s)}
+                    className="w-full text-left rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:bg-primary/5 transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <InitialsAvatar name={name} className="w-10 h-10" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm truncate">{name}</span>
+                          {s.isProfileVerified && (
+                            <BadgeCheck className="w-4 h-4 text-primary shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                      </div>
+                      <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className="h-full bg-primary" style={{ width: `${s.profileCompletion}%` }} />
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground">{s.profileCompletion}%</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>{s.documentCount} doc{s.documentCount !== 1 ? 's' : ''}</span>
+                          {s.agent && <span className="text-primary/80">· {s.agent.name}</span>}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- Student detail dialog ---------------- */}
+      <Dialog open={!!studentDetail || studentDetailLoading} onOpenChange={(o) => { if (!o) { setStudentDetail(null); closeDocViewer(); } }}>
+        <DialogContent className="sm:max-w-2xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+          {studentDetailLoading || !studentDetail ? (
+            <div className="flex justify-center items-center h-64">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <>
+              <div className="flex-none p-6 border-b bg-muted/20">
+                <DialogHeader>
+                  <div className="flex items-center gap-4">
+                    <InitialsAvatar name={[studentDetail.firstName, studentDetail.lastName].filter(Boolean).join(' ') || studentDetail.email} className="w-12 h-12 text-base" />
+                    <div>
+                      <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                        {[studentDetail.firstName, studentDetail.lastName].filter(Boolean).join(' ') || studentDetail.email}
+                        {studentDetail.isProfileVerified && <BadgeCheck className="w-5 h-5 text-primary" />}
+                      </DialogTitle>
+                      <DialogDescription>{studentDetail.email}</DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Profile completion */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-muted-foreground uppercase tracking-wider text-[11px]">Profile Completion</span>
+                    <span className="font-mono text-xs font-bold text-primary">{studentDetail.profileCompletion}%</span>
+                  </div>
+                  <Progress value={studentDetail.profileCompletion} className="h-2" />
+                </div>
+
+                {/* Key facts */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Fact icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={studentDetail.email} />
+                  <Fact icon={<Phone className="w-3.5 h-3.5" />} label="Phone" value={studentDetail.phoneNumber || '—'} />
+                  <Fact icon={<ShieldCheck className="w-3.5 h-3.5" />} label="Agent" value={studentDetail.agent?.name || 'Unassigned'} />
+                  <Fact icon={<CalendarDays className="w-3.5 h-3.5" />} label="Date of Birth" value={studentDetail.dob ? new Date(studentDetail.dob).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'} />
+                  <Fact icon={<MapPin className="w-3.5 h-3.5" />} label="Address" value={studentDetail.address || '—'} />
+                  <Fact icon={<BadgeCheck className="w-3.5 h-3.5" />} label="Verified" value={studentDetail.isProfileVerified ? 'Yes' : 'No'} />
+                </div>
+
+                {/* Documents */}
+                <div className="space-y-3">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Documents</h3>
+                  {studentDetail.documents.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-muted/30 p-8 text-center">
+                      <FileSearch className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {studentDetail.documents.map((doc) => {
+                        return (
+                          <div key={doc.id} className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                              <FileIcon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold">{doc.docType.replace(/_/g, ' ')}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">{doc.docUrl.split('/').pop()}</p>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                'text-[10px] shrink-0',
+                                doc.status === 'VERIFIED' ? 'bg-green-500/10 text-green-600' :
+                                doc.status === 'REJECTED' ? 'bg-red-500/10 text-red-600' :
+                                'bg-amber-500/10 text-amber-600',
+                              )}
+                            >
+                              {doc.status}
+                            </Badge>
+                            <button
+                              onClick={() => previewDoc(doc, studentDetail.id)}
+                              disabled={loadingDocId === doc.id}
+                              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-50 shrink-0"
+                            >
+                              {loadingDocId === doc.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Eye className="w-3.5 h-3.5" />}
+                              Preview
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-none p-4 border-t bg-muted/20 flex justify-between gap-3">
+                <Button variant="ghost" size="sm" onClick={() => { setStudentDetail(null); closeDocViewer(); }}>
+                  ← Back to list
+                </Button>
+                <Button variant="outline" onClick={() => { setStudentDetail(null); closeDocViewer(); }}>Close</Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- Payment link dialog ---------------- */}
+      <Dialog open={!!paymentLinkTarget} onOpenChange={(o) => !o && setPaymentLinkTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" /> Add Payment Link
+            </DialogTitle>
+            <DialogDescription>
+              {paymentLinkTarget?.student.name} — {paymentLinkTarget?.universityName}, {paymentLinkTarget?.course}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <label className="text-sm font-medium">Payment link <span className="text-destructive">*</span></label>
+            <input
+              type="url"
+              value={paymentLink}
+              onChange={(e) => setPaymentLink(e.target.value)}
+              placeholder="https://pay.flywire.com/..."
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground">
+              This link will be shown to the student on their application page so they can complete payment.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setPaymentLinkTarget(null)}>Cancel</Button>
+            <Button
+              disabled={!paymentLink.trim() || savingPaymentLink}
+              onClick={submitPaymentLink}
+              className="gap-2"
+            >
+              {savingPaymentLink && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save &amp; Advance
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- Reject dialog ---------------- */}
+      <Dialog open={!!rejectTarget} onOpenChange={(o) => !o && setRejectTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <XCircle className="w-5 h-5" /> Reject Application
+            </DialogTitle>
+            <DialogDescription>
+              {rejectTarget?.student.name} — {rejectTarget?.universityName}, {rejectTarget?.course}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <label className="text-sm font-medium">Rejection reason <span className="text-destructive">*</span></label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Explain why this application is being rejected..."
+              rows={4}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectReason.trim() || rejecting}
+              onClick={submitReject}
+              className="gap-2"
+            >
+              {rejecting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Reject Application
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ---------------- Application details ---------------- */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <DialogContent className="sm:max-w-3xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
           <div className="flex-none p-6 border-b bg-muted/20">
             <DialogHeader>
               <div className="flex items-center gap-4">
-                <Avatar className="w-12 h-12">
-                  <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selected?.student.name}`} />
-                  <AvatarFallback>{selected?.student.name[0]?.toUpperCase()}</AvatarFallback>
-                </Avatar>
+                <InitialsAvatar name={selected?.student.name ?? ''} className="w-12 h-12 text-base" />
                 <div className="flex flex-col items-start gap-1">
                   <DialogTitle className="text-xl font-bold tracking-tight">{selected?.student.name}</DialogTitle>
                   <DialogDescription>
@@ -623,11 +1058,25 @@ export default function Admin() {
 
             {selected && (
               <div className="flex items-center gap-3">
-                <Badge variant="secondary" className={cn('uppercase tracking-wider', statusBadge[selected.status])}>{selected.status}</Badge>
+                <Badge variant="secondary" className={cn('tracking-wide whitespace-nowrap', statusBadge[selected.status])}>
+                  {STATUS_LABELS[selected.status]}
+                </Badge>
                 <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all" style={{ width: `${statusProgress(selected.status)}%` }} />
+                  <div
+                    className={cn('h-full transition-all', selected.status === 'REJECTED' ? 'bg-red-500' : 'bg-primary')}
+                    style={{ width: `${statusProgress(selected.status)}%` }}
+                  />
                 </div>
                 <span className="text-xs font-mono text-muted-foreground">{statusProgress(selected.status)}%</span>
+              </div>
+            )}
+            {selected?.status === 'REJECTED' && selected.rejectionReason && (
+              <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-red-600">Rejection Reason</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{selected.rejectionReason}</p>
+                </div>
               </div>
             )}
 
@@ -659,20 +1108,34 @@ export default function Admin() {
 
           <div className="p-4 border-t bg-muted/20 flex justify-end gap-3">
             <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
-            {selected && selected.status !== 'COMPLETED' && (
+            {selected && selected.status !== 'COMPLETED' && selected.status !== 'REJECTED' && (
+              <Button
+                variant="destructive"
+                className="gap-2"
+                onClick={() => { openReject(selected); setSelected(null); }}
+              >
+                <XCircle className="w-4 h-4" /> Reject
+              </Button>
+            )}
+            {selected && nextStatus(selected.status) && (
               <Button
                 className="gap-2"
-                onClick={() => {
-                  handleAdvance(selected);
-                  setSelected(null);
-                }}
+                onClick={() => { handleAdvance(selected); setSelected(null); }}
               >
-                <CheckCircle2 className="w-4 h-4" /> Advance to {nextStatus(selected.status)}
+                <CheckCircle2 className="w-4 h-4" /> Advance to {STATUS_LABELS[nextStatus(selected.status)!]}
               </Button>
             )}
           </div>
         </DialogContent>
       </Dialog>
+
+      <DocumentViewer
+        open={!!docViewer}
+        url={docViewer?.url ?? null}
+        title={docViewer?.title ?? 'Document'}
+        type={docViewer?.type}
+        onClose={closeDocViewer}
+      />
     </div>
   );
 }

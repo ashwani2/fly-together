@@ -7,6 +7,15 @@
 const BASE_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000/api';
 
+// Signed URLs from the backend are relative paths ("/api/files/...").
+// In production they share an origin with the frontend; in dev the backend
+// is on a different port, so we need to prepend the backend origin.
+export function resolveSignedUrl(url: string): string {
+  if (url.startsWith('http')) return url;
+  const apiOrigin = new URL(BASE_URL).origin; // e.g. "http://localhost:4000"
+  return `${apiOrigin}${url}`;
+}
+
 const ACCESS_KEY = 'ft_access_token';
 const REFRESH_KEY = 'ft_refresh_token';
 
@@ -246,11 +255,13 @@ export interface LoanApplication {
 }
 
 export type ApplicationStatus =
-  | 'PROFILE'
-  | 'DOCUMENTS'
-  | 'VERIFICATION'
-  | 'APPLICATION'
-  | 'PAYMENT'
+  | 'CREATED'
+  | 'REJECTED'
+  | 'DOCUMENT_VERIFIED'
+  | 'SENT_TO_UNIVERSITY'
+  | 'PENDING_WITH_UNIVERSITY'
+  | 'VERIFIED_BY_UNIVERSITY'
+  | 'PAYMENT_PENDING'
   | 'COMPLETED';
 export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
 export interface Application {
@@ -296,6 +307,7 @@ export interface AdminApplication {
   course: string;
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
+  paymentLink: string | null;
   rejectionReason: string | null;
   createdAt: string;
   student: {
@@ -309,6 +321,28 @@ export interface AdminApplication {
     documentCount: number;
   };
   agent: { id: string; name: string } | null;
+}
+
+export interface AdminStudentSummary {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  phoneNumber: string | null;
+  profileCompletion: number;
+  isProfileCompleted: boolean;
+  isProfileVerified: boolean;
+  isDocSubmitted: boolean;
+  documentCount: number;
+  agent: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+export interface AdminStudentDetail extends Omit<AdminStudentSummary, 'documentCount'> {
+  dob: string | null;
+  address: string | null;
+  documents: StudentDocument[];
 }
 
 export interface Consent {
@@ -348,7 +382,10 @@ export const api = {
     updateMe: (body: Partial<{ firstName: string; lastName: string; dob: string; address: string; phoneNumber: string }>) =>
       rawRequest<StudentProfile>('/students/me', { method: 'PUT', body }),
     documents: () => rawRequest<StudentDocument[]>('/students/me/documents'),
-    documentViewUrl: (id: string) => rawRequest<{ url: string }>(`/students/me/documents/${id}/url`),
+    documentViewUrl: async (id: string) => {
+      const r = await rawRequest<{ url: string }>(`/students/me/documents/${id}/url`);
+      return { url: resolveSignedUrl(r.url) };
+    },
     uploadDocument: (docType: DocType, file: File) => {
       const form = new FormData();
       form.append('docType', docType);
@@ -461,6 +498,12 @@ export const api = {
         method: 'PATCH',
         body: { agentId },
       }),
+    students: () => rawRequest<AdminStudentSummary[]>('/admin/students'),
+    studentDetail: (id: string) => rawRequest<AdminStudentDetail>(`/admin/students/${id}`),
+    studentDocumentUrl: async (studentId: string, docId: string) => {
+      const r = await rawRequest<{ url: string }>(`/admin/students/${studentId}/documents/${docId}/url`);
+      return { url: resolveSignedUrl(r.url) };
+    },
   },
 
   audit: {

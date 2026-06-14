@@ -1,43 +1,49 @@
 import React, { useEffect, useState } from 'react';
 import {
-  CheckCircle2, Clock, CreditCard, ShieldCheck, Loader2, GraduationCap, Plus, X, ChevronRight,
+  CheckCircle2, Clock, CreditCard, ShieldCheck, Loader2, GraduationCap, Plus, ChevronRight, XCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { swal } from '@/lib/swal';
-import { api, type Application, type ApplicationTimelineEntry, type University } from '@/lib/api';
-import { ApplicationPreview } from '@/components/ApplicationPreview';
+import { api, type Application, type ApplicationTimelineEntry } from '@/lib/api';
+import { useNavigate } from 'react-router-dom';
 
-const prettyAction = (action: string) =>
-  action
-    .replace(/^STATUS_/, '')
-    .replace(/^PAYMENT_/, 'Payment ')
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+const prettyStatus: Record<string, string> = {
+  CREATED: 'Created',
+  REJECTED: 'Rejected',
+  DOCUMENT_VERIFIED: 'Document Verified',
+  SENT_TO_UNIVERSITY: 'Sent to University',
+  PENDING_WITH_UNIVERSITY: 'Pending with University',
+  VERIFIED_BY_UNIVERSITY: 'Verified by University',
+  PAYMENT_PENDING: 'Payment Pending',
+  COMPLETED: 'Completed',
+};
 
-const statusBadgeClass = (status: string) =>
-  status === 'COMPLETED'
-    ? 'bg-green-500/10 text-green-600 border-green-500/20'
-    : status === 'PAYMENT'
-      ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-      : status === 'VERIFICATION'
-        ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-        : 'bg-muted text-muted-foreground';
+const prettyAction = (action: string) => {
+  const stripped = action.replace(/^STATUS_/, '').replace(/^PAYMENT_/, 'PAYMENT_');
+  return prettyStatus[stripped] ?? stripped.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const statusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'COMPLETED':          return 'bg-green-500/10 text-green-600 border-green-500/20';
+    case 'REJECTED':           return 'bg-red-500/10 text-red-600 border-red-500/20';
+    case 'PAYMENT_PENDING':    return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+    case 'VERIFIED_BY_UNIVERSITY': return 'bg-purple-500/10 text-purple-600 border-purple-500/20';
+    case 'PENDING_WITH_UNIVERSITY': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+    case 'SENT_TO_UNIVERSITY': return 'bg-sky-500/10 text-sky-600 border-sky-500/20';
+    case 'DOCUMENT_VERIFIED':  return 'bg-teal-500/10 text-teal-600 border-teal-500/20';
+    default:                   return 'bg-muted text-muted-foreground';
+  }
+};
 
 export default function Applications() {
+  const navigate = useNavigate();
   const [apps, setApps] = useState<Application[]>([]);
   const [selected, setSelected] = useState<Application | null>(null);
   const [timeline, setTimeline] = useState<ApplicationTimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ universityName: '', course: '' });
-  const [universities, setUniversities] = useState<University[]>([]);
-  const [preview, setPreview] = useState<{ universityName: string; course: string } | null>(null);
 
   const loadApps = async (selectId?: string) => {
     setLoading(true);
@@ -56,25 +62,11 @@ export default function Applications() {
 
   useEffect(() => {
     loadApps();
-    api.universities.list().then(setUniversities).catch(() => {});
   }, []);
 
   const selectApp = async (a: Application) => {
     setSelected(a);
     try { setTimeline(await api.applications.timeline(a.id)); } catch { setTimeline([]); }
-  };
-
-  const openCreate = () => {
-    const uni = universities[0];
-    setForm({ universityName: uni?.name ?? '', course: uni?.courses[0] ?? '' });
-    setCreateOpen(true);
-  };
-
-  const reviewCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.universityName || !form.course) return;
-    setCreateOpen(false);
-    setPreview({ universityName: form.universityName, course: form.course });
   };
 
   if (loading) {
@@ -92,7 +84,7 @@ export default function Applications() {
           <h1 className="text-3xl font-bold tracking-tight">My Applications</h1>
           <p className="text-muted-foreground">Track every application from submission to enrollment.</p>
         </div>
-        <Button onClick={openCreate} className="gap-2 rounded-full shrink-0">
+        <Button onClick={() => navigate('/search')} className="gap-2 rounded-full shrink-0">
           <Plus className="w-4 h-4" /> Create Application
         </Button>
       </div>
@@ -106,7 +98,7 @@ export default function Applications() {
             <h2 className="text-2xl font-bold">No applications yet</h2>
             <p className="text-muted-foreground">Create your first application to start your study-abroad journey.</p>
           </div>
-          <Button onClick={openCreate} size="lg" className="rounded-full px-8 gap-2">
+          <Button onClick={() => navigate('/search')} size="lg" className="rounded-full px-8 gap-2">
             <Plus className="w-4 h-4" /> Create Application
           </Button>
         </div>
@@ -151,6 +143,17 @@ export default function Applications() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-2">
+                  {selected.status === 'REJECTED' && (
+                    <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                      <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                      <div>
+                        <p className="text-sm font-semibold text-red-600">Application Rejected</p>
+                        <p className="mt-0.5 text-sm text-muted-foreground">
+                          {selected.rejectionReason || 'No reason provided. Please contact your agent for more details.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <h3 className="text-sm font-bold mb-4 text-muted-foreground uppercase tracking-wide">Journey Timeline</h3>
                   <div className="space-y-6">
                     {timeline.map((item, idx) => {
@@ -243,76 +246,6 @@ export default function Applications() {
         </div>
       )}
 
-      {/* Create Application — university + course, then review */}
-      {createOpen && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/55 backdrop-blur-sm" onClick={() => setCreateOpen(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">Create Application</h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">Where would you like to apply?</p>
-              </div>
-              <button onClick={() => setCreateOpen(false)} className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Close">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {universities.length === 0 ? (
-              <div className="mt-6 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
-                No universities are available right now. Please check back later.
-              </div>
-            ) : (
-              <form onSubmit={reviewCreate} className="mt-5 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="uniName">University</Label>
-                  <select
-                    id="uniName"
-                    value={form.universityName}
-                    onChange={(e) => {
-                      const u = universities.find((x) => x.name === e.target.value);
-                      setForm({ universityName: e.target.value, course: u?.courses[0] ?? '' });
-                    }}
-                    className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    {universities.map((u) => (
-                      <option key={u.id} value={u.name}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="course">Course</Label>
-                  <select
-                    id="course"
-                    value={form.course}
-                    onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))}
-                    className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    {(universities.find((u) => u.name === form.universityName)?.courses ?? []).map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex justify-end gap-3 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                  <Button type="submit">Review &amp; Continue</Button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      <ApplicationPreview
-        open={!!preview}
-        universityName={preview?.universityName ?? ''}
-        course={preview?.course ?? ''}
-        onClose={() => setPreview(null)}
-        onSubmitted={() => {
-          setPreview(null);
-          swal.success('Your application has been submitted successfully.', 'Application submitted');
-          loadApps();
-        }}
-      />
     </div>
   );
 }
