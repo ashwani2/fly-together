@@ -110,22 +110,22 @@ export default function AdminAccommodations() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="name" className="text-right">Property Name</Label>
                   <Input id="name" className="col-span-3" {...register('name')} />
                   <FieldError msg={errors.name?.message} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="city" className="text-right">City</Label>
                   <Input id="city" className="col-span-3" placeholder="e.g. London" {...register('city')} />
                   <FieldError msg={errors.city?.message} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="type" className="text-right">Room Type</Label>
                   <Input id="type" className="col-span-3" {...register('type')} />
                   <FieldError msg={errors.type?.message} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="price" className="text-right">Base Rate</Label>
                   <Input id="price" placeholder="e.g. £300/pw" className="col-span-3" {...register('price')} />
                   <FieldError msg={errors.price?.message} />

@@ -174,7 +174,11 @@ export default function Applications() {
                               <time className="font-mono text-xs text-primary">{new Date(item.createdAt).toLocaleDateString()}</time>
                             </div>
                             <div className="text-muted-foreground text-sm">
-                              {item.action === 'CREATED' ? 'Your application was submitted.' : 'Status updated by the Fly Together team.'}
+                              {item.action === 'CREATED'
+                                ? 'Your application was submitted.'
+                                : item.action.startsWith('REUPLOAD_REQUESTED')
+                                ? 'A document was rejected during review. Please re-upload it from Profile & Documents.'
+                                : 'Status updated by the Fly Together team.'}
                             </div>
                           </div>
                         </div>

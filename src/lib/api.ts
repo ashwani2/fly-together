@@ -131,11 +131,13 @@ function tryRefresh(): Promise<boolean> {
 
 export type Role = 'STUDENT' | 'ADMIN' | 'AGENT';
 
+export type Gender = 'MALE' | 'FEMALE' | 'OTHERS';
 export interface AuthUser {
   id: string;
   email: string;
   role: Role;
   phoneNumber: string | null;
+  gender: Gender | null;
 }
 export interface AuthResult {
   user: AuthUser;
@@ -147,6 +149,7 @@ export interface StudentProfile {
   id: string;
   userId: string;
   agentId: string | null;
+  agent?: { id: string; name: string } | null;
   firstName: string | null;
   lastName: string | null;
   dob: string | null;
@@ -158,16 +161,32 @@ export interface StudentProfile {
 }
 
 export type DocType = 'PASSPORT' | 'AADHAR' | 'ACADEMICS' | 'IELTS';
+export type AcademicSubType = 'TENTH' | 'TWELFTH' | 'GRADUATION' | 'OTHER';
 export type DocStatus = 'UPLOADED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
 export interface StudentDocument {
   id: string;
   studentId: string;
   docUrl: string;
   docType: DocType;
+  subType: AcademicSubType | null;
   status: DocStatus;
   removed: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Human-readable label for a document, including the academic subtype. */
+export const ACADEMIC_SUBTYPE_LABELS: Record<AcademicSubType, string> = {
+  TENTH: '10th Certificate',
+  TWELFTH: '12th Certificate',
+  GRADUATION: 'Graduation',
+  OTHER: 'Other Academic',
+};
+
+export function docLabel(doc: { docType: DocType; subType?: AcademicSubType | null }): string {
+  if (doc.docType === 'ACADEMICS' && doc.subType) return ACADEMIC_SUBTYPE_LABELS[doc.subType];
+  if (doc.docType === 'ACADEMICS') return 'Academic Certificate';
+  return doc.docType.charAt(0) + doc.docType.slice(1).toLowerCase();
 }
 
 export interface University {
@@ -323,6 +342,48 @@ export interface AdminApplication {
   agent: { id: string; name: string } | null;
 }
 
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface AdminApplicationsQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: ApplicationStatus | 'All';
+}
+
+export interface AgentApplication {
+  id: string;
+  universityName: string;
+  course: string;
+  status: ApplicationStatus;
+  paymentStatus: PaymentStatus;
+  rejectionReason: string | null;
+  createdAt: string;
+  student: {
+    id: string;
+    name: string;
+    email: string;
+    phoneNumber: string | null;
+    profileCompletion: number;
+    isProfileCompleted: boolean;
+    isProfileVerified: boolean;
+    documentCount: number;
+  };
+  documents: StudentDocument[];
+}
+
+export interface AdminStudentsQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
 export interface AdminStudentSummary {
   id: string;
   userId: string;
@@ -345,6 +406,15 @@ export interface AdminStudentDetail extends Omit<AdminStudentSummary, 'documentC
   documents: StudentDocument[];
 }
 
+export interface AppNotification {
+  id: string;
+  applicationId: string | null;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
 export interface Consent {
   id: string;
   userId: string;
@@ -365,7 +435,7 @@ const q = (params: Record<string, string | undefined>) => {
 
 export const api = {
   auth: {
-    register: (body: { email: string; password: string; role?: 'STUDENT' | 'AGENT'; consent: true; name?: string; phoneNumber?: string }) =>
+    register: (body: { email: string; password: string; role?: 'STUDENT' | 'AGENT'; consent: true; name?: string; phoneNumber?: string; gender?: Gender }) =>
       rawRequest<AuthResult>('/auth/register', { method: 'POST', body, auth: false }),
     login: (email: string, password: string) =>
       rawRequest<AuthResult>('/auth/login', { method: 'POST', body: { email, password }, auth: false }),
@@ -386,9 +456,10 @@ export const api = {
       const r = await rawRequest<{ url: string }>(`/students/me/documents/${id}/url`);
       return { url: resolveSignedUrl(r.url) };
     },
-    uploadDocument: (docType: DocType, file: File) => {
+    uploadDocument: (docType: DocType, file: File, subType?: AcademicSubType) => {
       const form = new FormData();
       form.append('docType', docType);
+      if (subType) form.append('subType', subType);
       form.append('file', file);
       return rawRequest<StudentDocument>('/students/me/documents', { method: 'POST', form });
     },
@@ -409,6 +480,13 @@ export const api = {
     myStudents: () => rawRequest<StudentProfile[]>('/agents/me/students'),
     verifyStudent: (studentId: string) =>
       rawRequest<StudentProfile>(`/agents/students/${studentId}/verify`, { method: 'PATCH' }),
+    applications: () => rawRequest<AgentApplication[]>('/agents/me/applications'),
+    verifyDocument: (docId: string, status: DocStatus) =>
+      rawRequest<StudentDocument>(`/agents/documents/${docId}/verify`, { method: 'PATCH', body: { status } }),
+    studentDocumentUrl: async (studentId: string, docId: string) => {
+      const r = await rawRequest<{ url: string }>(`/agents/students/${studentId}/documents/${docId}/url`);
+      return { url: resolveSignedUrl(r.url) };
+    },
   },
 
   universities: {
@@ -492,18 +570,68 @@ export const api = {
 
   admin: {
     stats: () => rawRequest<AdminStats>('/admin/stats'),
-    applications: () => rawRequest<AdminApplication[]>('/admin/applications'),
+    applications: (params: AdminApplicationsQuery = {}) =>
+      rawRequest<Paginated<AdminApplication>>(
+        `/admin/applications${q({
+          page: params.page != null ? String(params.page) : undefined,
+          pageSize: params.pageSize != null ? String(params.pageSize) : undefined,
+          search: params.search || undefined,
+          status: params.status && params.status !== 'All' ? params.status : undefined,
+        })}`,
+      ),
     assignAgent: (applicationId: string, agentId: string | null) =>
       rawRequest<{ success: boolean }>(`/admin/applications/${applicationId}/assign-agent`, {
         method: 'PATCH',
         body: { agentId },
       }),
-    students: () => rawRequest<AdminStudentSummary[]>('/admin/students'),
+    students: (params: AdminStudentsQuery = {}) =>
+      rawRequest<Paginated<AdminStudentSummary>>(
+        `/admin/students${q({
+          page: params.page != null ? String(params.page) : undefined,
+          pageSize: params.pageSize != null ? String(params.pageSize) : undefined,
+          search: params.search || undefined,
+        })}`,
+      ),
     studentDetail: (id: string) => rawRequest<AdminStudentDetail>(`/admin/students/${id}`),
     studentDocumentUrl: async (studentId: string, docId: string) => {
       const r = await rawRequest<{ url: string }>(`/admin/students/${studentId}/documents/${docId}/url`);
       return { url: resolveSignedUrl(r.url) };
     },
+  },
+
+  sop: {
+    /**
+     * Generates a Statement of Purpose (markdown) for a student application via
+     * the external SOP service. Returns the raw markdown string.
+     */
+    generate: async (studentData: {
+      fullName: string;
+      country?: string;
+      university: string;
+      campus?: string;
+      course: string;
+    }): Promise<string> => {
+      const res = await fetch('https://universitysearch-jvqc.onrender.com/generate-sop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentData }),
+      });
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+      if (!res.ok || !json?.success || typeof json?.sop !== 'string') {
+        throw new Error(json?.message || 'Could not generate the SOP. Please try again.');
+      }
+      return json.sop as string;
+    },
+  },
+
+  notifications: {
+    list: () => rawRequest<AppNotification[]>('/notifications'),
+    markAllRead: () => rawRequest<{ success: boolean }>('/notifications/read-all', { method: 'PATCH' }),
   },
 
   audit: {

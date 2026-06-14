@@ -110,21 +110,21 @@ export default function AdminUniversities() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="name" className="text-right">Name</Label>
                   <Input id="name" className="col-span-3" {...register('name')} />
                   <FieldError msg={errors.name?.message} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="location" className="text-right">Location</Label>
                   <Input id="location" className="col-span-3" {...register('location')} />
                   <FieldError msg={errors.location?.message} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-4">
                   <Label htmlFor="tuitionFee" className="text-right">Tuition Fee</Label>
                   <Input id="tuitionFee" className="col-span-3" placeholder="£20,000 - £35,000" {...register('tuitionFee')} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-4">
                   <Label htmlFor="logo" className="text-right">Logo URL</Label>
                   <Input id="logo" className="col-span-3" placeholder="https://logo.clearbit.com/..." {...register('logo')} />
                 </div>

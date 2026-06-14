@@ -20,15 +20,17 @@ import {
 } from "@/components/ui/sheet";
 import { Sidebar } from './Sidebar';
 import { ThemeScopeWrapper } from '@/lib/ThemeContext';
-import { mockNotifications } from '@/mockData';
 import { useAuth } from '@/lib/AuthContext';
-import { api } from '@/lib/api';
+import { api, type AppNotification } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const [firstName, setFirstName] = React.useState<string>('');
+  const [notifications, setNotifications] = React.useState<AppNotification[]>([]);
 
   React.useEffect(() => {
     if (role !== 'student') return;
@@ -39,6 +41,26 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
       .catch(() => {});
     return () => { active = false; };
   }, [role]);
+
+  React.useEffect(() => {
+    if (role !== 'student') return;
+    let active = true;
+    const refresh = () => api.notifications.list().then((n) => { if (active) setNotifications(n); }).catch(() => {});
+    refresh();
+    // Lightweight polling so new activity shows without a manual refresh.
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 45000);
+    return () => { active = false; clearInterval(interval); };
+  }, [role]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const markAllRead = async () => {
+    if (unreadCount === 0) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    try { await api.notifications.markAllRead(); } catch { /* will reconcile on next poll */ }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -79,33 +101,65 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
       <div className="flex items-center gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger render={
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
+            <Button variant="ghost" size="icon-lg" className="relative overflow-visible">
+              <Bell className="size-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 z-10 min-w-[16px] h-4 px-1 inline-flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold leading-none text-white ring-2 ring-background">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </Button>
           } />
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+              <DropdownMenuLabel className="flex items-center justify-between gap-2">
+                <span>Notifications</span>
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="text-xs font-medium text-primary hover:underline">
+                    Mark all read
+                  </button>
+                )}
+              </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <div className="max-h-[300px] overflow-y-auto">
-              <DropdownMenuGroup>
-                {mockNotifications.map((n) => (
-                  <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-1 p-4 cursor-default">
-                    <div className="flex items-center justify-between w-full">
-                      <span className="font-semibold text-sm">{n.title}</span>
-                      <span className="text-[10px] text-muted-foreground">{n.time}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
+            <div className="max-h-[320px] overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">No activity yet.</p>
+              ) : (
+                <DropdownMenuGroup>
+                  {notifications.map((n) => (
+                    <DropdownMenuItem
+                      key={n.id}
+                      className={cn('flex items-start gap-3 p-4 cursor-pointer', !n.read && 'bg-primary/5')}
+                      onClick={() => navigate('/dashboard/applications')}
+                    >
+                      <div className={cn(
+                        'grid h-8 w-8 shrink-0 place-items-center rounded-full',
+                        !n.read ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+                      )}>
+                        <Bell className="h-4 w-4" />
+                      </div>
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span className="font-semibold text-sm flex items-center gap-1.5">
+                            {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                            {n.title}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              )}
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem className="justify-center text-primary font-medium">
-                View all notifications
+              <DropdownMenuItem className="justify-center text-primary font-medium" onClick={() => navigate('/dashboard/applications')}>
+                View all applications
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

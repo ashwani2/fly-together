@@ -14,7 +14,8 @@ import {
   Handshake,
   Layers,
   Banknote,
-  MessageSquare
+  MessageSquare,
+  Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
@@ -36,6 +37,7 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
       title: 'Main',
       items: [
         { icon: ShieldCheck, label: 'Applications', path: '/dashboard/admin' },
+        { icon: Users, label: 'Agent Network', path: '/dashboard/admin/agents' },
       ]
     },
     {
@@ -69,7 +71,7 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
   return (
     <aside className={cn("w-64 border-r bg-card h-screen flex flex-col sticky top-0", className)}>
       <Link to="/" className="p-5 flex items-center hover:opacity-80 transition-opacity">
-        <Logo imgClassName="h-12" />
+        <Logo imgClassName="h-14 md:h-16" />
       </Link>
       
       <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">

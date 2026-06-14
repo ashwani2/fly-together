@@ -95,6 +95,16 @@ export function ThemeScopeWrapper({
   const { getTheme } = useTheme();
   const theme = getTheme(scope);
 
+  // Mirror dark mode onto the document root so portaled UI (dialogs, dropdowns,
+  // toasts, the document viewer) — which renders outside this wrapper — is also
+  // themed correctly. Without this, modals stay light while the page is dark.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', theme.isDarkMode);
+    root.style.setProperty('--primary', `oklch(${theme.primaryColor})`);
+    root.style.setProperty('--ring', `oklch(${theme.primaryColor})`);
+  }, [theme.isDarkMode, theme.primaryColor]);
+
   const style = {
     '--primary': `oklch(${theme.primaryColor})`,
     '--ring': `oklch(${theme.primaryColor})`,

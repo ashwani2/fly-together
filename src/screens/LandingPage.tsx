@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { mockTestimonials, mockHomePartners } from "@/mockData";
 import { Testimonial, HomePartner } from "@/types";
 import { api } from "@/lib/api";
+import { swal } from "@/lib/swal";
 import { AnimatePresence } from "motion/react";
 
 // Curated course/subject list used for the hero search typeahead.
@@ -91,7 +92,7 @@ const COURSE_SUGGESTIONS = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { user, loginAsAgentDummy } = useAuth();
+  const { user } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -190,6 +191,11 @@ export default function LandingPage() {
 
   const handleConnect = () => openAuth("/dashboard");
 
+  const showInvestors = () => {
+    setIsMenuOpen(false);
+    swal.info("Our investor relations page is coming soon. Stay tuned!", "Investors — Coming Soon");
+  };
+
   // Live course suggestions, shown once the user has typed at least 2 characters.
   const searchSuggestions = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -247,6 +253,12 @@ export default function LandingPage() {
               >
                 Blog
               </Link>
+              <button
+                onClick={showInvestors}
+                className="text-sm font-medium hover:text-primary transition-colors cursor-pointer"
+              >
+                Investors
+              </button>
 
               <div className="w-px h-6 bg-border mx-2" />
 
@@ -324,6 +336,12 @@ export default function LandingPage() {
               >
                 Blog
               </Link>
+              <button
+                onClick={showInvestors}
+                className="block w-full text-left text-lg font-medium"
+              >
+                Investors
+              </button>
               <Button
                 onClick={handleConnect}
                 className="w-full rounded-full text-lg h-12"
@@ -555,7 +573,7 @@ export default function LandingPage() {
                   className="group/card relative flex shrink-0 items-center gap-4 rounded-2xl border border-border/60 bg-card/70 px-6 py-4 shadow-[0_2px_12px_-6px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-all duration-500 hover:-translate-y-1 hover:border-primary/30 hover:bg-card hover:shadow-[0_18px_40px_-12px_rgba(15,23,42,0.28)]"
                   title={`View ${partner.name} Certificate/Newsletter`}
                 >
-                  <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-white p-3 ring-1 ring-border/70 transition-all duration-500 group-hover/card:scale-105 group-hover/card:ring-primary/40">
+                  <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-white dark:bg-white/90 p-3 ring-1 ring-border/70 transition-all duration-500 group-hover/card:scale-105 group-hover/card:ring-primary/40">
                     <img
                       src={partner.logo}
                       alt={partner.name}
@@ -916,19 +934,12 @@ export default function LandingPage() {
                     </button>
                   </li>
                   <li>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await loginAsAgentDummy();
-                          navigate("/dashboard/agent");
-                        } catch (e) {
-                          console.error("Agent login failed", e);
-                        }
-                      }}
-                      className="hover:text-amber-500 transition-colors cursor-pointer text-left"
+                    <Link
+                      to="/agent-login"
+                      className="hover:text-primary transition-colors"
                     >
                       Agent Portal
-                    </button>
+                    </Link>
                   </li>
                   <li>
                     <Link
@@ -937,6 +948,14 @@ export default function LandingPage() {
                     >
                       Admin Portal
                     </Link>
+                  </li>
+                  <li>
+                    <button
+                      onClick={showInvestors}
+                      className="hover:text-primary transition-colors cursor-pointer text-left"
+                    >
+                      Investors
+                    </button>
                   </li>
                   <li>
                     <a

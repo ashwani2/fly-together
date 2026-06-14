@@ -15,23 +15,29 @@ import {
   MapPin
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mockStudent, mockNotifications } from '@/mockData';
-import { ApplicationStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { api } from '@/lib/api';
+import { api, type Application, type StudentProfile } from '@/lib/api';
 import { Navigate, Link } from 'react-router-dom';
 
-const steps: { label: ApplicationStatus; icon: any }[] = [
-  { label: 'Profile', icon: UserCircle },
-  { label: 'Documents', icon: FileText },
-  { label: 'Verification', icon: ShieldCheck },
-  { label: 'Application', icon: GraduationCap },
-  { label: 'Payment', icon: CreditCard },
-];
+const STATUS_LABELS: Record<string, string> = {
+  CREATED: 'Created',
+  REJECTED: 'Rejected',
+  DOCUMENT_VERIFIED: 'Document Verified',
+  SENT_TO_UNIVERSITY: 'Sent to University',
+  PENDING_WITH_UNIVERSITY: 'Pending with University',
+  VERIFIED_BY_UNIVERSITY: 'Verified by University',
+  PAYMENT_PENDING: 'Payment Pending',
+  COMPLETED: 'Completed',
+};
+
+const statusBadgeClass = (s: string) =>
+  s === 'COMPLETED' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+  s === 'REJECTED' ? 'bg-red-500/10 text-red-600 border-red-500/20' :
+  s === 'PAYMENT_PENDING' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
+  'bg-amber-500/10 text-amber-600 border-amber-500/20';
 
 const quickServices = [
   { icon: GraduationCap, label: 'Universities', path: '/dashboard/uni', color: 'bg-indigo-500/10 text-indigo-500' },
@@ -43,6 +49,8 @@ const quickServices = [
 export default function Dashboard() {
   const { role, user } = useAuth();
   const [firstName, setFirstName] = React.useState<string>(() => user?.displayName?.split(' ')[0] ?? '');
+  const [profile, setProfile] = React.useState<StudentProfile | null>(null);
+  const [apps, setApps] = React.useState<Application[]>([]);
 
   React.useEffect(() => {
     if (role !== 'student') return;
@@ -50,8 +58,14 @@ export default function Dashboard() {
     api.students
       .me()
       .then((p) => {
-        if (active && p.firstName) setFirstName(p.firstName);
+        if (!active) return;
+        if (p.firstName) setFirstName(p.firstName);
+        setProfile(p);
       })
+      .catch(() => {});
+    api.applications
+      .list()
+      .then((list) => { if (active) setApps(list); })
       .catch(() => {});
     return () => {
       active = false;
@@ -61,6 +75,10 @@ export default function Dashboard() {
   if (role === 'admin') {
     return <Navigate to="/dashboard/admin" replace />;
   }
+
+  // The newest application is the student's active one.
+  const active = apps[0] ?? null;
+  const agentName = profile?.agent?.name ?? null;
 
 
   return (
@@ -96,67 +114,57 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Active Application */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Active Application</CardTitle>
-              <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">In Review</Badge>
-            </div>
-            <CardDescription>Details of your primary university application.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center gap-4 p-4 rounded-xl border bg-muted/30">
-              <div className="w-16 h-16 rounded-lg bg-white dark:bg-white/90 border flex items-center justify-center p-2">
-                <img src="https://logo.clearbit.com/ox.ac.uk" alt="Oxford" className="w-full h-full object-contain" />
+      {/* Active Application */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Active Application</CardTitle>
+            {active && (
+              <Badge variant="outline" className={cn('border', statusBadgeClass(active.status))}>
+                {STATUS_LABELS[active.status] ?? active.status}
+              </Badge>
+            )}
+          </div>
+          <CardDescription>Details of your latest university application.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {active ? (
+            <>
+              <div className="flex items-center gap-4 p-4 rounded-xl border bg-muted/30">
+                <div className="w-16 h-16 rounded-lg bg-primary/10 text-primary border flex items-center justify-center shrink-0">
+                  <GraduationCap className="w-8 h-8" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-lg truncate">{active.universityName}</h3>
+                  <p className="text-sm text-muted-foreground truncate">{active.course}</p>
+                </div>
+                <Button variant="ghost" size="icon" className="ml-auto" render={<Link to="/dashboard/applications" />}>
+                  <ArrowRight className="w-5 h-5" />
+                </Button>
               </div>
-              <div>
-                <h3 className="font-bold text-lg">{mockStudent.university}</h3>
-                <p className="text-sm text-muted-foreground">{mockStudent.course}</p>
-              </div>
-              <Button variant="ghost" size="icon" className="ml-auto">
-                <ArrowRight className="w-5 h-5" />
-              </Button>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl border space-y-1">
-                <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Application ID</p>
-                <p className="font-mono font-medium">LFT-2024-8892</p>
-              </div>
-              <div className="p-4 rounded-xl border space-y-1">
-                <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Consultant</p>
-                <p className="font-medium">Sarah Williams</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Notifications */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Updates</CardTitle>
-            <CardDescription>Stay updated with your status.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {mockNotifications.slice(0, 3).map((n) => (
-              <div key={n.id} className="flex gap-3 pb-4 border-b last:border-0 last:pb-0">
-                <div className={cn(
-                  "w-2 h-2 rounded-full mt-1.5 shrink-0",
-                  n.type === 'success' ? "bg-green-500" : n.type === 'warning' ? "bg-amber-500" : "bg-blue-500"
-                )} />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium leading-none">{n.title}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
-                  <p className="text-[10px] text-muted-foreground">{n.time}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Application ID</p>
+                  <p className="font-mono font-medium text-sm break-all">{active.id}</p>
+                </div>
+                <div className="p-4 rounded-xl border space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Agent</p>
+                  <p className="font-medium">{agentName ?? 'Not assigned yet'}</p>
                 </div>
               </div>
-            ))}
-            <Button variant="outline" className="w-full mt-2">View All Updates</Button>
-          </CardContent>
-        </Card>
-      </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center space-y-3">
+              <GraduationCap className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+              <p className="text-sm text-muted-foreground">You don't have any applications yet.</p>
+              <Button render={<Link to="/dashboard/uni" />} className="gap-2">
+                Browse Universities <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

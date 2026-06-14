@@ -12,7 +12,9 @@ const Services = lazy(() => import('./screens/Services'));
 const LoanApplication = lazy(() => import('./screens/LoanApplication'));
 const Applications = lazy(() => import('./screens/Applications'));
 const Admin = lazy(() => import('./screens/Admin'));
+const AdminAgents = lazy(() => import('./screens/AdminAgents'));
 const AdminLogin = lazy(() => import('./screens/AdminLogin'));
+const AgentLogin = lazy(() => import('./screens/AgentLogin'));
 const ResetPassword = lazy(() => import('./screens/ResetPassword'));
 const AdminAccommodations = lazy(() => import('./screens/AdminAccommodations'));
 const AdminPartners = lazy(() => import('./screens/AdminPartners'));
@@ -28,6 +30,7 @@ const Agent = lazy(() => import('./screens/Agent'));
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
 import { SwalHost } from './lib/swal';
+import { ToastHost } from './lib/toast';
 import { LoadingScreen } from './components/LoadingScreen';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'student' | 'admin' | 'agent' }) {
@@ -59,11 +62,13 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <SwalHost />
+        <ToastHost />
         <Router>
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/admin-login" element={<AdminLogin />} />
+              <Route path="/agent-login" element={<AgentLogin />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/blog" element={<Blog />} />
               <Route path="/search" element={<SearchResults />} />
@@ -77,6 +82,7 @@ export default function App() {
                 <Route path="market" element={<Marketplace />} />
                 <Route path="uni" element={<Universities />} />
                 <Route path="admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
+                <Route path="admin/agents" element={<ProtectedRoute role="admin"><AdminAgents /></ProtectedRoute>} />
                 <Route path="admin/loans" element={<ProtectedRoute role="admin"><AdminLoans /></ProtectedRoute>} />
                 <Route path="admin/testimonials" element={<ProtectedRoute role="admin"><AdminTestimonials /></ProtectedRoute>} />
                 <Route path="admin/blogs" element={<ProtectedRoute role="admin"><AdminBlogs /></ProtectedRoute>} />

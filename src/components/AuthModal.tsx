@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
-import { X, Mail, User, Phone, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { X, Mail, User, Phone, Users, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { api } from '@/lib/api';
+import { api, type Gender } from '@/lib/api';
 import { Logo } from '@/components/Logo';
 import { PasswordField } from '@/components/PasswordField';
 
@@ -47,6 +47,7 @@ const registerSchema = z.object({
 interface FormValues {
   name?: string;
   phone?: string;
+  gender?: string;
   email: string;
   password?: string;
   consent?: boolean;
@@ -86,7 +87,7 @@ export function AuthModal({ open, onClose, onSuccess, intent }: AuthModalProps) 
   } = useForm<FormValues>({
     resolver,
     mode: 'onSubmit',
-    defaultValues: { name: '', phone: '', email: '', password: '', consent: false },
+    defaultValues: { name: '', phone: '', gender: '', email: '', password: '', consent: false },
   });
 
   useEffect(() => {
@@ -94,7 +95,7 @@ export function AuthModal({ open, onClose, onSuccess, intent }: AuthModalProps) 
       setMode('login');
       setSent(false);
       setApiError('');
-      reset({ name: '', phone: '', email: '', password: '', consent: false });
+      reset({ name: '', phone: '', gender: '', email: '', password: '', consent: false });
     }
   }, [open, reset]);
 
@@ -118,6 +119,7 @@ export function AuthModal({ open, onClose, onSuccess, intent }: AuthModalProps) 
           role: 'STUDENT',
           name: values.name!.trim(),
           phoneNumber: values.phone!.trim(),
+          gender: values.gender ? (values.gender as Gender) : undefined,
         });
         onSuccess();
       } else {
@@ -215,6 +217,19 @@ export function AuthModal({ open, onClose, onSuccess, intent }: AuthModalProps) 
                         />
                       </Field>
                       <FieldError msg={errors.phone?.message} />
+                    </div>
+                    <div>
+                      <Field icon={<Users className="h-4 w-4" />}>
+                        <select
+                          {...register('gender')}
+                          className="w-full bg-transparent text-sm outline-none text-foreground"
+                        >
+                          <option value="">Gender (optional)</option>
+                          <option value="MALE">Male</option>
+                          <option value="FEMALE">Female</option>
+                          <option value="OTHERS">Others</option>
+                        </select>
+                      </Field>
                     </div>
                   </>
                 )}

@@ -118,12 +118,12 @@ export default function AdminPartners() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-x-4 gap-y-1.5">
                   <Label htmlFor="name" className="text-right">Company Name</Label>
                   <Input id="name" className="col-span-3" {...register('name')} />
                   <FieldError msg={errors.name?.message} />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-4">
                   <Label htmlFor="category" className="text-right">Category</Label>
                   <select
                     id="category"
@@ -135,7 +135,7 @@ export default function AdminPartners() {
                     ))}
                   </select>
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 sm:items-center gap-4">
                   <Label htmlFor="price" className="text-right">Price</Label>
                   <Input id="price" placeholder="e.g. From £120/week" className="col-span-3" {...register('price')} />
                 </div>

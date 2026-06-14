@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   api,
+  docLabel,
   type AdminStats,
   type AdminApplication,
   type AdminStudentSummary,
@@ -9,10 +10,13 @@ import {
   type AgentSummary,
   type ApplicationStatus,
   type ApplicationTimelineEntry,
+  type StudentDocument,
+  type DocStatus,
 } from '@/lib/api';
 import { Progress } from '@/components/ui/progress';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { swal } from '@/lib/swal';
+import { toast } from '@/lib/toast';
 import {
   Users,
   Search,
@@ -22,12 +26,11 @@ import {
   ShieldCheck,
   FileText as FileIcon,
   GraduationCap,
-  Plus,
-  Trash2,
   FileCheck,
   Mail,
   Phone,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Loader2,
   Clock,
@@ -37,7 +40,14 @@ import {
   BadgeCheck,
   CalendarDays,
   MapPin,
+  Sparkles,
+  Copy,
+  Download,
+  Check,
+  Pencil,
 } from 'lucide-react';
+import { Markdown } from '@/lib/markdown';
+import { downloadSopPdf, downloadSopDocx } from '@/lib/sopExport';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -54,13 +64,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -68,19 +78,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
-import { PasswordField } from '@/components/PasswordField';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-
-const agentSchema = z.object({
-  name: z.string().trim().min(1, 'Agent name is required'),
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-});
-type AgentFormValues = z.infer<typeof agentSchema>;
+import { BrandedLoader } from '@/components/BrandedLoader';
 
 const STAT_DEFS: { key: keyof AdminStats; label: string; icon: any; color: string; bg: string }[] = [
   { key: 'students', label: 'Total Students', icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -171,11 +170,22 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | ApplicationStatus>('All');
+
+  // Server-side pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [appsLoading, setAppsLoading] = useState(true);
+  const [pageSizeMenuOpen, setPageSizeMenuOpen] = useState(false);
 
   const [selected, setSelected] = useState<AdminApplication | null>(null);
   const [timeline, setTimeline] = useState<ApplicationTimelineEntry[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<StudentDocument[]>([]);
+  const [selectedDocsLoading, setSelectedDocsLoading] = useState(false);
 
   const [rejectTarget, setRejectTarget] = useState<AdminApplication | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -185,35 +195,40 @@ export default function Admin() {
   const [paymentLink, setPaymentLink] = useState('');
   const [savingPaymentLink, setSavingPaymentLink] = useState(false);
 
-  // Student list dialog
+  // Student list dialog (server-side paginated + searched)
   const [studentListOpen, setStudentListOpen] = useState(false);
   const [studentList, setStudentList] = useState<AdminStudentSummary[]>([]);
   const [studentListLoading, setStudentListLoading] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
+  const [studentDebouncedSearch, setStudentDebouncedSearch] = useState('');
+  const [studentPage, setStudentPage] = useState(1);
+  const [studentPageSize, setStudentPageSize] = useState(10);
+  const [studentTotal, setStudentTotal] = useState(0);
+  const [studentTotalPages, setStudentTotalPages] = useState(1);
+  const [studentPageSizeMenuOpen, setStudentPageSizeMenuOpen] = useState(false);
 
   // Student detail dialog
   const [studentDetail, setStudentDetail] = useState<AdminStudentDetail | null>(null);
   const [studentDetailLoading, setStudentDetailLoading] = useState(false);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
+  const [docActionId, setDocActionId] = useState<string | null>(null);
+  const [docBulkBusy, setDocBulkBusy] = useState(false);
   const [docViewer, setDocViewer] = useState<{ url: string; title: string; type: string } | null>(null);
 
-  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
-  const {
-    register: registerAgent,
-    handleSubmit: handleAgentSubmit,
-    reset: resetAgentForm,
-    formState: { errors: agentErrors, isSubmitting: savingAgent },
-  } = useForm<AgentFormValues>({
-    resolver: zodResolver(agentSchema),
-    mode: 'onTouched',
-    defaultValues: { name: '', email: '', password: '' },
-  });
+  // SOP generation dialog
+  const [sopTarget, setSopTarget] = useState<AdminApplication | null>(null);
+  const [sopPhase, setSopPhase] = useState<'form' | 'result'>('form');
+  const [sopForm, setSopForm] = useState({ fullName: '', country: '', university: '', campus: '', course: '' });
+  const [sopLoading, setSopLoading] = useState(false);
+  const [sopContent, setSopContent] = useState('');
+  const [sopMode, setSopMode] = useState<'view' | 'edit'>('view');
+  const [sopCopied, setSopCopied] = useState(false);
 
-  const load = useCallback(async () => {
+  // Stats + agent network — loaded once.
+  const loadMeta = useCallback(async () => {
     try {
-      const [s, a, ag] = await Promise.all([api.admin.stats(), api.admin.applications(), api.agents.list()]);
+      const [s, ag] = await Promise.all([api.admin.stats(), api.agents.list()]);
       setStats(s);
-      setApps(a);
       setAgents(ag);
     } catch (e) {
       console.error('Failed to load admin data', e);
@@ -224,15 +239,40 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadMeta();
+  }, [loadMeta]);
 
-  const refreshApps = async () => {
+  // Course applications — paginated/searched/filtered server-side.
+  const fetchApps = useCallback(async () => {
+    setAppsLoading(true);
     try {
-      const a = await api.admin.applications();
-      setApps(a);
-    } catch { /* ignore */ }
-  };
+      const res = await api.admin.applications({ page, pageSize, search: debouncedSearch, status: statusFilter });
+      setApps(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
+      // Clamp if we ran past the last page (e.g. after filtering or deletions).
+      if (res.page > res.totalPages) setPage(res.totalPages);
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not load applications.');
+    } finally {
+      setAppsLoading(false);
+    }
+  }, [page, pageSize, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    fetchApps();
+  }, [fetchApps]);
+
+  // Debounce the search box → reset to first page when the query settles.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const refreshApps = () => { fetchApps(); };
 
   const handleAssignAgent = async (application: AdminApplication, agentId: string) => {
     const next = agentId === 'unassigned' ? null : agentId;
@@ -265,13 +305,24 @@ export default function Admin() {
       return;
     }
     setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: target } : a)));
+    // Keep the open details modal (if any) in sync — it stays open until the admin closes it.
+    setSelected((cur) => (cur && cur.id === application.id ? { ...cur, status: target } : cur));
     try {
       await api.applications.setStatus(application.id, target);
       // When marking COMPLETED, also close out the payment status.
       if (target === 'COMPLETED') {
         await api.applications.setPayment(application.id, 'COMPLETED', application.paymentLink ?? undefined);
         setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, paymentStatus: 'COMPLETED' } : a)));
+        setSelected((cur) => (cur && cur.id === application.id ? { ...cur, paymentStatus: 'COMPLETED' } : cur));
       }
+      // Refresh the timeline shown in the open modal so the new phase appears.
+      if (selected?.id === application.id) {
+        api.applications.timeline(application.id).then(setTimeline).catch(() => {});
+      }
+      toast.success(
+        `${application.student.name}'s application moved to “${STATUS_LABELS[target]}”.`,
+        'Application advanced',
+      );
     } catch (e: any) {
       swal.error(e?.message || 'Could not update status.');
       refreshApps();
@@ -290,6 +341,18 @@ export default function Admin() {
             ? { ...a, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: paymentLink.trim(), paymentStatus: 'PENDING' }
             : a,
         ),
+      );
+      setSelected((cur) =>
+        cur && cur.id === paymentLinkTarget.id
+          ? { ...cur, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: paymentLink.trim(), paymentStatus: 'PENDING' }
+          : cur,
+      );
+      if (selected?.id === paymentLinkTarget.id) {
+        api.applications.timeline(paymentLinkTarget.id).then(setTimeline).catch(() => {});
+      }
+      toast.success(
+        `${paymentLinkTarget.student.name}'s application moved to “${STATUS_LABELS.PAYMENT_PENDING}”.`,
+        'Application advanced',
       );
       setPaymentLinkTarget(null);
     } catch (e: any) {
@@ -324,47 +387,51 @@ export default function Admin() {
   const openDetails = async (application: AdminApplication) => {
     setSelected(application);
     setTimeline([]);
+    setSelectedDocs([]);
     setTimelineLoading(true);
-    try {
-      setTimeline(await api.applications.timeline(application.id));
-    } catch { /* ignore */ } finally {
-      setTimelineLoading(false);
-    }
+    setSelectedDocsLoading(true);
+    // Timeline + the applicant's documents, in parallel.
+    api.applications.timeline(application.id)
+      .then(setTimeline)
+      .catch(() => { /* ignore */ })
+      .finally(() => setTimelineLoading(false));
+    api.admin.studentDetail(application.student.id)
+      .then((detail) => setSelectedDocs(detail.documents))
+      .catch(() => { /* ignore */ })
+      .finally(() => setSelectedDocsLoading(false));
   };
 
-  const onCreateAgent = async (values: AgentFormValues) => {
-    try {
-      await api.agents.create(values);
-      setIsAgentDialogOpen(false);
-      resetAgentForm({ name: '', email: '', password: '' });
-      const ag = await api.agents.list();
-      setAgents(ag);
-      swal.success('Agent onboarded successfully. They can now log in with the credentials you set.');
-    } catch (e: any) {
-      swal.error(e?.message || 'Could not onboard agent.');
-    }
-  };
-
-  const handleDeleteAgent = async (agent: AgentSummary) => {
-    if (!(await swal.confirm('This removes the agent and unassigns their students.', { title: `Delete ${agent.name}?`, confirmText: 'Delete', variant: 'error' }))) return;
-    try {
-      await api.agents.remove(agent.id);
-      setAgents((prev) => prev.filter((a) => a.id !== agent.id));
-      refreshApps();
-    } catch (e: any) {
-      swal.error(e?.message || 'Could not delete agent.');
-    }
-  };
-
-  const openStudentList = async () => {
-    setStudentListOpen(true);
+  const openStudentList = () => {
     setStudentSearch('');
-    if (studentList.length) return;
-    setStudentListLoading(true);
-    try { setStudentList(await api.admin.students()); }
-    catch { swal.error('Could not load students.'); }
-    finally { setStudentListLoading(false); }
+    setStudentDebouncedSearch('');
+    setStudentPage(1);
+    setStudentListOpen(true);
   };
+
+  const fetchStudents = useCallback(async () => {
+    setStudentListLoading(true);
+    try {
+      const res = await api.admin.students({ page: studentPage, pageSize: studentPageSize, search: studentDebouncedSearch });
+      setStudentList(res.items);
+      setStudentTotal(res.total);
+      setStudentTotalPages(res.totalPages);
+      if (res.page > res.totalPages) setStudentPage(res.totalPages);
+    } catch { swal.error('Could not load students.'); }
+    finally { setStudentListLoading(false); }
+  }, [studentPage, studentPageSize, studentDebouncedSearch]);
+
+  useEffect(() => {
+    if (studentListOpen) fetchStudents();
+  }, [studentListOpen, fetchStudents]);
+
+  // Debounce the student search → reset to first page.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setStudentDebouncedSearch(studentSearch.trim());
+      setStudentPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [studentSearch]);
 
   const openStudentDetail = async (s: AdminStudentSummary) => {
     setStudentDetail(null);
@@ -379,7 +446,7 @@ export default function Admin() {
     setDocViewer((v) => { if (v) URL.revokeObjectURL(v.url); return null; });
   };
 
-  const previewDoc = async (doc: { id: string; docUrl: string; docType: string }, studentId: string) => {
+  const previewDoc = async (doc: StudentDocument, studentId: string) => {
     setLoadingDocId(doc.id);
     try {
       const { url } = await api.admin.studentDocumentUrl(studentId, doc.id);
@@ -387,27 +454,104 @@ export default function Admin() {
       if (!resp.ok) throw new Error('Could not load document.');
       const blob = await resp.blob();
       const objectUrl = URL.createObjectURL(blob);
-      setDocViewer((prev) => { if (prev) URL.revokeObjectURL(prev.url); return { url: objectUrl, title: doc.docType.replace(/_/g, ' '), type: blob.type }; });
+      setDocViewer((prev) => { if (prev) URL.revokeObjectURL(prev.url); return { url: objectUrl, title: docLabel(doc), type: blob.type }; });
     } catch (e: any) { swal.error(e?.message ?? 'Could not load document.'); }
     finally { setLoadingDocId(null); }
   };
 
-  const filteredStudents = studentList.filter((s) => {
-    const q = studentSearch.toLowerCase();
-    const name = [s.firstName, s.lastName].filter(Boolean).join(' ');
-    return name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-  });
+  // Reflect a document status change in whichever open list holds it.
+  const applyDocStatusLocal = (docId: string, status: DocStatus) => {
+    setSelectedDocs((prev) => prev.map((d) => (d.id === docId ? { ...d, status } : d)));
+    setStudentDetail((prev) => prev ? { ...prev, documents: prev.documents.map((d) => (d.id === docId ? { ...d, status } : d)) } : prev);
+  };
 
-  const filteredApps = apps.filter((a) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      a.student.name.toLowerCase().includes(q) ||
-      a.student.email.toLowerCase().includes(q) ||
-      a.universityName.toLowerCase().includes(q) ||
-      a.course.toLowerCase().includes(q);
-    const matchesStatus = statusFilter === 'All' || a.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const reviewDoc = async (doc: StudentDocument, status: DocStatus) => {
+    setDocActionId(doc.id);
+    try {
+      await api.documents.verify(doc.id, status);
+      applyDocStatusLocal(doc.id, status);
+      toast.success(`${docLabel(doc)} ${status === 'VERIFIED' ? 'verified' : 'rejected'}.`, 'Document updated');
+      // A rejection prompts the student to re-upload — refresh the open timeline so it shows.
+      if (status === 'REJECTED' && selected) api.applications.timeline(selected.id).then(setTimeline).catch(() => {});
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not update the document.');
+    } finally {
+      setDocActionId(null);
+    }
+  };
+
+  const reviewAllDocs = async (docs: StudentDocument[], status: DocStatus) => {
+    const targets = docs.filter((d) => d.status !== status);
+    if (!targets.length) return;
+    setDocBulkBusy(true);
+    try {
+      await Promise.all(targets.map((d) => api.documents.verify(d.id, status)));
+      targets.forEach((d) => applyDocStatusLocal(d.id, status));
+      toast.success(`All documents ${status === 'VERIFIED' ? 'verified' : 'rejected'}.`, 'Documents updated');
+      if (status === 'REJECTED' && selected) api.applications.timeline(selected.id).then(setTimeline).catch(() => {});
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not update the documents.');
+    } finally {
+      setDocBulkBusy(false);
+    }
+  };
+
+  const openSopDialog = (application: AdminApplication) => {
+    setSopTarget(application);
+    setSopPhase('form');
+    setSopContent('');
+    setSopMode('view');
+    setSopCopied(false);
+    setSopForm({
+      fullName: application.student.name,
+      country: '',
+      university: application.universityName,
+      campus: '',
+      course: application.course,
+    });
+  };
+
+  const runSopGeneration = async () => {
+    if (!sopForm.fullName.trim() || !sopForm.university.trim() || !sopForm.course.trim()) return;
+    setSopLoading(true);
+    try {
+      const sop = await api.sop.generate({
+        fullName: sopForm.fullName.trim(),
+        country: sopForm.country.trim() || undefined,
+        university: sopForm.university.trim(),
+        campus: sopForm.campus.trim() || undefined,
+        course: sopForm.course.trim(),
+      });
+      setSopContent(sop);
+      setSopMode('view');
+      setSopPhase('result');
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not generate the SOP. Please try again.');
+    } finally {
+      setSopLoading(false);
+    }
+  };
+
+  const copySop = async () => {
+    try {
+      await navigator.clipboard.writeText(sopContent);
+      setSopCopied(true);
+      setTimeout(() => setSopCopied(false), 2000);
+    } catch {
+      swal.error('Could not copy to clipboard.');
+    }
+  };
+
+  const downloadSop = async (format: 'pdf' | 'docx') => {
+    if (!sopTarget) return;
+    const base = `SOP-${sopTarget.student.name.replace(/\s+/g, '_')}`;
+    try {
+      if (format === 'pdf') await downloadSopPdf(sopContent, `${base}.pdf`);
+      else await downloadSopDocx(sopContent, `${base}.docx`);
+    } catch (e: any) {
+      swal.error(e?.message || `Could not export the SOP as ${format.toUpperCase()}.`);
+    }
+  };
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto">
@@ -444,20 +588,9 @@ export default function Admin() {
         })}
       </div>
 
-      <Tabs defaultValue="applications" className="space-y-6">
-        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="bg-muted/50 p-1 inline-flex w-auto md:w-full justify-start md:justify-center min-w-max">
-            <TabsTrigger value="applications" className="gap-2">
-              <FileCheck className="w-4 h-4" /> Course Applications
-            </TabsTrigger>
-            <TabsTrigger value="agents" className="gap-2">
-              <ShieldCheck className="w-4 h-4" /> Agent Network
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
+      <div className="space-y-6">
         {/* ---------------- Applications ---------------- */}
-        <TabsContent value="applications">
+        <div>
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -486,7 +619,7 @@ export default function Admin() {
                       <DropdownMenuGroup>
                         <DropdownMenuLabel>Filter by Phase</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuRadioGroup value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+                        <DropdownMenuRadioGroup value={statusFilter} onValueChange={(v) => { setStatusFilter(v as any); setPage(1); }}>
                           <DropdownMenuRadioItem value="All">All Phases</DropdownMenuRadioItem>
                           {([...STATUS_ORDER, 'REJECTED'] as ApplicationStatus[]).map((s) => (
                             <DropdownMenuRadioItem key={s} value={s}>{STATUS_LABELS[s]}</DropdownMenuRadioItem>
@@ -512,14 +645,14 @@ export default function Admin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loading ? (
+                    {appsLoading ? (
                       <TableRow>
                         <TableCell colSpan={6} className="h-40 text-center">
-                          <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                          <BrandedLoader label="Loading applications…" className="py-6" />
                         </TableCell>
                       </TableRow>
-                    ) : filteredApps.length > 0 ? (
-                      filteredApps.map((a) => (
+                    ) : apps.length > 0 ? (
+                      apps.map((a) => (
                         <TableRow key={a.id} className="group">
                           <TableCell className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -567,7 +700,7 @@ export default function Admin() {
                                 {agents.length === 0 ? (
                                   <div className="px-2 py-4 text-center">
                                     <p className="text-xs text-muted-foreground">No agents yet.</p>
-                                    <p className="text-[11px] text-muted-foreground/70">Onboard one from the Agent Network tab.</p>
+                                    <p className="text-[11px] text-muted-foreground/70">Onboard one from the Agent Network page.</p>
                                   </div>
                                 ) : (
                                   <DropdownMenuRadioGroup
@@ -645,6 +778,13 @@ export default function Admin() {
                                 <XCircle className="w-4 h-4" />
                               </button>
                               <button
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-violet-500 hover:bg-violet-500/10 disabled:opacity-30"
+                                onClick={() => openSopDialog(a)}
+                                title="Generate SOP"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                              </button>
+                              <button
                                 className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
                                 onClick={() => openDetails(a)}
                                 title="Details"
@@ -658,130 +798,72 @@ export default function Admin() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
-                          {apps.length === 0 ? 'No applications have been submitted yet.' : `No applications match "${searchQuery}".`}
+                          {debouncedSearch || statusFilter !== 'All'
+                            ? 'No applications match your search or filter.'
+                            : 'No applications have been submitted yet.'}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {/* ---------------- Agents ---------------- */}
-        <TabsContent value="agents">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="pb-3 border-b bg-muted/20">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <CardTitle>Agent Network</CardTitle>
-                  <CardDescription>Onboard agents and see how many students each is handling.</CardDescription>
-                </div>
-                <Dialog open={isAgentDialogOpen} onOpenChange={(open) => {
-                  setIsAgentDialogOpen(open);
-                  if (!open) resetAgentForm({ name: '', email: '', password: '' });
-                }}>
-                  <DialogTrigger render={
-                    <Button className="gap-2">
-                      <Plus className="w-4 h-4" /> Onboard Agent
-                    </Button>
-                  } />
-                  <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Onboard New Agent</DialogTitle>
-                      <DialogDescription>
-                        Creates a login for the agent. They can sign in with the email and password you set below.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleAgentSubmit(onCreateAgent)} noValidate className="space-y-4 pt-4">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Agent Name</label>
-                        <Input {...registerAgent('name')} placeholder="Full Name" />
-                        {agentErrors.name && <p className="px-1 text-xs font-medium text-red-600">{agentErrors.name.message}</p>}
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Email Address</label>
-                        <Input type="email" {...registerAgent('email')} placeholder="agent@example.com" />
-                        {agentErrors.email && <p className="px-1 text-xs font-medium text-red-600">{agentErrors.email.message}</p>}
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Temporary Password</label>
-                        <PasswordField {...registerAgent('password')} placeholder="At least 8 characters" />
-                        {agentErrors.password && <p className="px-1 text-xs font-medium text-red-600">{agentErrors.password.message}</p>}
-                      </div>
-                      <div className="flex justify-end gap-3 pt-4">
-                        <Button type="button" variant="outline" onClick={() => setIsAgentDialogOpen(false)}>Cancel</Button>
-                        <Button type="submit" disabled={savingAgent} className="gap-2">
-                          {savingAgent && <Loader2 className="w-4 h-4 animate-spin" />} Onboard Agent
+              {/* Pagination */}
+              <div className="flex flex-col gap-3 border-t bg-muted/10 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span>
+                    {total === 0
+                      ? 'No results'
+                      : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="hidden sm:inline">Rows per page</span>
+                    <DropdownMenu open={pageSizeMenuOpen} onOpenChange={setPageSizeMenuOpen}>
+                      <DropdownMenuTrigger render={
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                          {pageSize}
+                          <ChevronDown className="w-3 h-3 opacity-50" />
                         </Button>
-                      </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
+                      } />
+                      <DropdownMenuContent align="start" className="min-w-[80px]">
+                        <DropdownMenuRadioGroup
+                          value={String(pageSize)}
+                          onValueChange={(v) => { setPageSize(Number(v)); setPage(1); setPageSizeMenuOpen(false); }}
+                        >
+                          {[5, 10, 20, 50].map((n) => (
+                            <DropdownMenuRadioItem key={n} value={String(n)}>{n}</DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    disabled={page <= 1 || appsLoading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    disabled={page >= totalPages || appsLoading}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    Next <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-muted/10">
-                  <TableRow>
-                    <TableHead className="px-6">Agent</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead className="text-center">Active Students</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="text-right px-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ) : agents.length > 0 ? (
-                    agents.map((agent) => (
-                      <TableRow key={agent.id}>
-                        <TableCell className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <InitialsAvatar name={agent.name} className="h-8 w-8 text-xs" />
-                            <span className="font-semibold text-sm">{agent.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{agent.email}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="secondary" className="px-2 py-0.5">{agent.numberOfStudents} Students</Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="secondary" className={cn('text-[10px]', agent.status === 'ACTIVE' ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground')}>
-                            {agent.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right px-6">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDeleteAgent(agent)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                        No agents yet. Use “Onboard Agent” to add your first one.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
 
       {/* ---------------- Student list dialog ---------------- */}
       <Dialog open={studentListOpen} onOpenChange={(o) => { setStudentListOpen(o); if (!o) setStudentSearch(''); }}>
@@ -803,13 +885,13 @@ export default function Admin() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {studentListLoading ? (
-              <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-            ) : filteredStudents.length === 0 ? (
+              <BrandedLoader label="Loading students…" className="py-16" />
+            ) : studentList.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-16">
-                {studentSearch ? `No students match "${studentSearch}".` : 'No students yet.'}
+                {studentDebouncedSearch ? `No students match "${studentDebouncedSearch}".` : 'No students yet.'}
               </p>
             ) : (
-              filteredStudents.map((s) => {
+              studentList.map((s) => {
                 const name = [s.firstName, s.lastName].filter(Boolean).join(' ') || s.email;
                 return (
                   <button
@@ -847,6 +929,59 @@ export default function Admin() {
               })
             )}
           </div>
+
+          {/* Student pagination */}
+          <div className="flex-none flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span>
+                {studentTotal === 0
+                  ? 'No results'
+                  : `${(studentPage - 1) * studentPageSize + 1}–${Math.min(studentPage * studentPageSize, studentTotal)} of ${studentTotal}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline">Rows</span>
+                <DropdownMenu open={studentPageSizeMenuOpen} onOpenChange={setStudentPageSizeMenuOpen}>
+                  <DropdownMenuTrigger render={
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                      {studentPageSize}
+                      <ChevronDown className="w-3 h-3 opacity-50" />
+                    </Button>
+                  } />
+                  <DropdownMenuContent align="start" className="min-w-[80px]">
+                    <DropdownMenuRadioGroup
+                      value={String(studentPageSize)}
+                      onValueChange={(v) => { setStudentPageSize(Number(v)); setStudentPage(1); setStudentPageSizeMenuOpen(false); }}
+                    >
+                      {[5, 10, 20, 50].map((n) => (
+                        <DropdownMenuRadioItem key={n} value={String(n)}>{n}</DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Page {studentPage} of {studentTotalPages}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                disabled={studentPage <= 1 || studentListLoading}
+                onClick={() => setStudentPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                disabled={studentPage >= studentTotalPages || studentListLoading}
+                onClick={() => setStudentPage((p) => Math.min(studentTotalPages, p + 1))}
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -855,7 +990,7 @@ export default function Admin() {
         <DialogContent className="sm:max-w-2xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
           {studentDetailLoading || !studentDetail ? (
             <div className="flex justify-center items-center h-64">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <BrandedLoader label="Loading student…" />
             </div>
           ) : (
             <>
@@ -894,53 +1029,17 @@ export default function Admin() {
                   <Fact icon={<BadgeCheck className="w-3.5 h-3.5" />} label="Verified" value={studentDetail.isProfileVerified ? 'Yes' : 'No'} />
                 </div>
 
-                {/* Documents */}
-                <div className="space-y-3">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Documents</h3>
-                  {studentDetail.documents.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border bg-muted/30 p-8 text-center">
-                      <FileSearch className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {studentDetail.documents.map((doc) => {
-                        return (
-                          <div key={doc.id} className="flex items-center gap-3 rounded-xl border bg-card p-3">
-                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                              <FileIcon className="w-4 h-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold">{doc.docType.replace(/_/g, ' ')}</p>
-                              <p className="text-[11px] text-muted-foreground truncate">{doc.docUrl.split('/').pop()}</p>
-                            </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                'text-[10px] shrink-0',
-                                doc.status === 'VERIFIED' ? 'bg-green-500/10 text-green-600' :
-                                doc.status === 'REJECTED' ? 'bg-red-500/10 text-red-600' :
-                                'bg-amber-500/10 text-amber-600',
-                              )}
-                            >
-                              {doc.status}
-                            </Badge>
-                            <button
-                              onClick={() => previewDoc(doc, studentDetail.id)}
-                              disabled={loadingDocId === doc.id}
-                              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-50 shrink-0"
-                            >
-                              {loadingDocId === doc.id
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <Eye className="w-3.5 h-3.5" />}
-                              Preview
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                {/* Documents — preview & verify/reject */}
+                <DocReviewList
+                  docs={studentDetail.documents}
+                  studentId={studentDetail.id}
+                  previewingId={loadingDocId}
+                  busyId={docActionId}
+                  bulkBusy={docBulkBusy}
+                  onPreview={previewDoc}
+                  onSetStatus={reviewDoc}
+                  onSetAll={reviewAllDocs}
+                />
               </div>
 
               <div className="flex-none p-4 border-t bg-muted/20 flex justify-between gap-3">
@@ -1029,7 +1128,7 @@ export default function Admin() {
       </Dialog>
 
       {/* ---------------- Application details ---------------- */}
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) { setSelected(null); setSelectedDocs([]); closeDocViewer(); } }}>
         <DialogContent className="sm:max-w-3xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
           <div className="flex-none p-6 border-b bg-muted/20">
             <DialogHeader>
@@ -1080,6 +1179,21 @@ export default function Admin() {
               </div>
             )}
 
+            {/* Documents — preview & verify/reject */}
+            {selected && (
+              <DocReviewList
+                docs={selectedDocs}
+                studentId={selected.student.id}
+                loading={selectedDocsLoading}
+                previewingId={loadingDocId}
+                busyId={docActionId}
+                bulkBusy={docBulkBusy}
+                onPreview={previewDoc}
+                onSetStatus={reviewDoc}
+                onSetAll={reviewAllDocs}
+              />
+            )}
+
             {/* Timeline */}
             <div className="space-y-3">
               <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Activity Timeline</h3>
@@ -1120,12 +1234,134 @@ export default function Admin() {
             {selected && nextStatus(selected.status) && (
               <Button
                 className="gap-2"
-                onClick={() => { handleAdvance(selected); setSelected(null); }}
+                onClick={() => handleAdvance(selected)}
               >
                 <CheckCircle2 className="w-4 h-4" /> Advance to {STATUS_LABELS[nextStatus(selected.status)!]}
               </Button>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- SOP generator dialog ---------------- */}
+      <Dialog open={!!sopTarget} onOpenChange={(o) => { if (!o) { setSopTarget(null); setSopContent(''); } }}>
+        <DialogContent className="sm:max-w-3xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+          <div className="flex-none p-6 border-b bg-muted/20">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-violet-500" /> Statement of Purpose
+              </DialogTitle>
+              <DialogDescription>
+                {sopTarget?.student.name} — {sopTarget?.universityName}, {sopTarget?.course}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          {sopLoading ? (
+            /* Branded fly-together loader */
+            <BrandedLoader label="Generating Statement of Purpose…" logoClassName="h-14 md:h-16" className="py-20 gap-8" />
+          ) : sopPhase === 'form' ? (
+            /* Step 1 — confirm / fill the details used to generate the SOP */
+            <>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Review the details below and fill in anything that's missing. These are used to generate the Statement of Purpose.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <SopField label="Full Name" required value={sopForm.fullName} onChange={(v) => setSopForm((f) => ({ ...f, fullName: v }))} placeholder="e.g. Ashwani Kumar" />
+                  <SopField label="Country" value={sopForm.country} onChange={(v) => setSopForm((f) => ({ ...f, country: v }))} placeholder="e.g. United Kingdom" />
+                  <SopField label="University" required value={sopForm.university} onChange={(v) => setSopForm((f) => ({ ...f, university: v }))} placeholder="e.g. University of Hull" />
+                  <SopField label="Campus" value={sopForm.campus} onChange={(v) => setSopForm((f) => ({ ...f, campus: v }))} placeholder="e.g. London Campus" />
+                  <div className="sm:col-span-2">
+                    <SopField label="Course" required value={sopForm.course} onChange={(v) => setSopForm((f) => ({ ...f, course: v }))} placeholder="e.g. MSc Computer Science" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex-none p-4 border-t bg-muted/20 flex justify-end gap-3">
+                <Button variant="outline" onClick={() => { setSopTarget(null); setSopContent(''); }}>Cancel</Button>
+                <Button
+                  className="gap-2"
+                  disabled={!sopForm.fullName.trim() || !sopForm.university.trim() || !sopForm.course.trim()}
+                  onClick={runSopGeneration}
+                >
+                  <Sparkles className="w-4 h-4" /> Generate SOP
+                </Button>
+              </div>
+            </>
+          ) : (
+            /* Step 2 — view / edit the generated SOP */
+            <>
+              <div className="flex-none flex items-center justify-between gap-2 px-6 py-3 border-b">
+                <div className="inline-flex rounded-lg border bg-muted/40 p-0.5">
+                  <button
+                    onClick={() => setSopMode('view')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                      sopMode === 'view' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Eye className="w-3.5 h-3.5" /> View
+                  </button>
+                  <button
+                    onClick={() => setSopMode('edit')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                      sopMode === 'edit' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={copySop}>
+                    {sopCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    {sopCopied ? 'Copied' : 'Copy'}
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <Download className="w-3.5 h-3.5" /> Download
+                        <ChevronDown className="w-3 h-3 opacity-50" />
+                      </Button>
+                    } />
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => downloadSop('pdf')} className="gap-2">
+                        <FileIcon className="w-4 h-4 text-red-500" /> PDF document
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => downloadSop('docx')} className="gap-2">
+                        <FileIcon className="w-4 h-4 text-blue-500" /> Word (.docx)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {sopMode === 'view' ? (
+                  <Markdown content={sopContent} className="text-sm text-foreground" />
+                ) : (
+                  <textarea
+                    value={sopContent}
+                    onChange={(e) => setSopContent(e.target.value)}
+                    rows={20}
+                    className="w-full h-full min-h-[24rem] rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm leading-relaxed shadow-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                  />
+                )}
+              </div>
+
+              <div className="flex-none p-4 border-t bg-muted/20 flex justify-between gap-3">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSopPhase('form')}>
+                    <Pencil className="w-3.5 h-3.5" /> Edit details
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={runSopGeneration}>
+                    <Sparkles className="w-3.5 h-3.5" /> Regenerate
+                  </Button>
+                </div>
+                <Button variant="outline" onClick={() => { setSopTarget(null); setSopContent(''); }}>Close</Button>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1136,6 +1372,140 @@ export default function Admin() {
         type={docViewer?.type}
         onClose={closeDocViewer}
       />
+    </div>
+  );
+}
+
+function DocReviewList({
+  docs,
+  studentId,
+  loading,
+  previewingId,
+  busyId,
+  bulkBusy,
+  onPreview,
+  onSetStatus,
+  onSetAll,
+}: {
+  docs: StudentDocument[];
+  studentId: string;
+  loading?: boolean;
+  previewingId: string | null;
+  busyId: string | null;
+  bulkBusy: boolean;
+  onPreview: (doc: StudentDocument, studentId: string) => void;
+  onSetStatus: (doc: StudentDocument, status: DocStatus) => void;
+  onSetAll: (docs: StudentDocument[], status: DocStatus) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Documents</h3>
+        {docs.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline" size="sm" className="h-7 gap-1.5 text-green-600 border-green-300 hover:bg-green-50"
+              disabled={bulkBusy || docs.every((d) => d.status === 'VERIFIED')}
+              onClick={() => onSetAll(docs, 'VERIFIED')}
+            >
+              {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Verify all
+            </Button>
+            <Button
+              variant="outline" size="sm" className="h-7 gap-1.5 text-red-600 border-red-300 hover:bg-red-50"
+              disabled={bulkBusy || docs.every((d) => d.status === 'REJECTED')}
+              onClick={() => onSetAll(docs, 'REJECTED')}
+            >
+              <XCircle className="w-3.5 h-3.5" /> Reject all
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin text-primary" /> Loading documents…
+        </div>
+      ) : docs.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
+          <FileSearch className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {docs.map((doc) => {
+            const busy = busyId === doc.id;
+            return (
+              <div key={doc.id} className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <FileIcon className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">{docLabel(doc)}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{doc.docUrl.split('/').pop()}</p>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    'text-[10px] shrink-0',
+                    doc.status === 'VERIFIED' ? 'bg-green-500/10 text-green-600' :
+                    doc.status === 'REJECTED' ? 'bg-red-500/10 text-red-600' :
+                    'bg-amber-500/10 text-amber-600',
+                  )}
+                >
+                  {doc.status}
+                </Badge>
+                <button
+                  onClick={() => onPreview(doc, studentId)}
+                  disabled={previewingId === doc.id}
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-50 shrink-0"
+                >
+                  {previewingId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                  View
+                </button>
+                <button
+                  onClick={() => onSetStatus(doc, 'VERIFIED')}
+                  disabled={busy || doc.status === 'VERIFIED'}
+                  title="Verify"
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-600 hover:bg-green-500/10 disabled:opacity-30 shrink-0"
+                >
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => onSetStatus(doc, 'REJECTED')}
+                  disabled={busy || doc.status === 'REJECTED'}
+                  title="Reject (asks student to re-upload)"
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-red-600 hover:bg-red-500/10 disabled:opacity-30 shrink-0"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SopField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium">
+        {label} {required && <span className="text-destructive">*</span>}
+      </label>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
     </div>
   );
 }

@@ -163,7 +163,7 @@ export default function AdminHomePartners() {
                 <TableRow key={partner.id}>
                   <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded border bg-white p-1 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded border bg-white dark:bg-white/90 p-1 flex items-center justify-center">
                         <img src={partner.logo} alt={partner.name} className="max-w-full max-h-full object-contain" />
                       </div>
                       <span className="font-semibold text-sm">{partner.name}</span>
