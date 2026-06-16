@@ -43,15 +43,22 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
   }, [role]);
 
   React.useEffect(() => {
-    if (role !== 'student') return;
+    if (!role) return;
     let active = true;
     const refresh = () => api.notifications.list().then((n) => { if (active) setNotifications(n); }).catch(() => {});
     refresh();
-    // Lightweight polling so new activity shows without a manual refresh.
+    // Poll every 20s while tab is visible.
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') refresh();
-    }, 45000);
-    return () => { active = false; clearInterval(interval); };
+    }, 20000);
+    // Instant refresh when another part of the app signals new activity.
+    const onRefreshEvent = () => refresh();
+    window.addEventListener('notifications:refresh', onRefreshEvent);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener('notifications:refresh', onRefreshEvent);
+    };
   }, [role]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -131,7 +138,16 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
                     <DropdownMenuItem
                       key={n.id}
                       className={cn('flex items-start gap-3 p-4 cursor-pointer', !n.read && 'bg-primary/5')}
-                      onClick={() => navigate('/dashboard/applications')}
+                      onClick={() => {
+                        const isAccomm = n.title.toLowerCase().includes('accommodation');
+                        if (role === 'admin') {
+                          navigate(isAccomm
+                            ? '/dashboard/admin/accommodations?tab=bookings&highlight=true'
+                            : '/dashboard/admin');
+                        } else {
+                          navigate(isAccomm ? '/dashboard/accommodation' : '/dashboard/applications');
+                        }
+                      }}
                     >
                       <div className={cn(
                         'grid h-8 w-8 shrink-0 place-items-center rounded-full',
@@ -158,8 +174,8 @@ export function TopNav({ onSettingsClick }: { onSettingsClick?: () => void }) {
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem className="justify-center text-primary font-medium" onClick={() => navigate('/dashboard/applications')}>
-                View all applications
+              <DropdownMenuItem className="justify-center text-primary font-medium" onClick={() => navigate(role === 'admin' ? '/dashboard/admin' : '/dashboard/applications')}>
+                {role === 'admin' ? 'Go to dashboard' : 'View all applications'}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

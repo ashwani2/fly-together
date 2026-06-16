@@ -210,6 +210,22 @@ export interface Accommodation {
   amenities: string[];
   image: string;
   description: string;
+  lat: number | null;
+  lng: number | null;
+}
+
+export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+
+export interface AccommodationBooking {
+  id: string;
+  accommodationId: string;
+  accommodation: Pick<Accommodation, 'id' | 'name' | 'city' | 'price' | 'image' | 'type'>;
+  user: { id: string; email: string };
+  checkIn: string;
+  checkOut: string;
+  status: BookingStatus;
+  message: string | null;
+  createdAt: string;
 }
 
 export type ServiceCategory =
@@ -506,6 +522,12 @@ export const api = {
     update: (id: string, body: Partial<Omit<Accommodation, 'id'>>) =>
       rawRequest<Accommodation>(`/accommodations/${id}`, { method: 'PUT', body }),
     remove: (id: string) => rawRequest<{ success: boolean }>(`/accommodations/${id}`, { method: 'DELETE' }),
+    book: (id: string, body: { checkIn: string; checkOut: string; message?: string }) =>
+      rawRequest<AccommodationBooking>(`/accommodations/${id}/bookings`, { method: 'POST', body }),
+    myBookings: () => rawRequest<AccommodationBooking[]>('/accommodations/my-bookings'),
+    listBookings: () => rawRequest<AccommodationBooking[]>('/accommodations/bookings'),
+    updateBookingStatus: (bookingId: string, status: BookingStatus) =>
+      rawRequest<AccommodationBooking>(`/accommodations/bookings/${bookingId}`, { method: 'PATCH', body: { status } }),
   },
 
   serviceProviders: {
