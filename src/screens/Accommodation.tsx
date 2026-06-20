@@ -1,6 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, Loader2, CalendarDays, X, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { MapPin, Loader2, CalendarDays, X, CheckCircle2, Clock, XCircle, ExternalLink, BedDouble, Bath, Search, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { api, type Accommodation as AccommodationType, type AccommodationBooking, type BookingStatus } from '@/lib/api';
+import { api, ApiError, type Accommodation as AccommodationType, type AccommodationBooking, type BookingStatus, type AmberListing } from '@/lib/api';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -323,6 +323,168 @@ function MyBookings() {
   );
 }
 
+// ── Explore (Amber partner inventory) ───────────────────────────────────────────
+
+function formatRange(min: number | null, max: number | null, currency: string, duration: string | null): string {
+  if (min == null && max == null) return 'Price on request';
+  const unit = duration ? `/${duration.replace('ly', '')}` : '';
+  const fmt = (n: number) => `${currency}${n.toLocaleString()}`;
+  if (min != null && max != null && min !== max) return `${fmt(min)} – ${fmt(max)}${unit}`;
+  return `${fmt((min ?? max)!)}${unit}`;
+}
+
+function bedBathLabel(range: { min: number | null; max: number | null }): string | null {
+  const { min, max } = range;
+  if (min == null && max == null) return null;
+  if (min != null && max != null && min !== max) return `${min}–${max}`;
+  return String(min ?? max);
+}
+
+function PropertyCard({ listing }: { listing: AmberListing; key?: React.Key }) {
+  const beds = bedBathLabel(listing.bedrooms);
+  const baths = bedBathLabel(listing.bathrooms);
+  return (
+    <Card className="overflow-hidden border-muted/60 flex flex-col group">
+      <div className="relative h-40 overflow-hidden bg-muted">
+        {listing.image ? (
+          <img
+            src={listing.image}
+            alt={listing.name}
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground"><MapPin className="w-6 h-6" /></div>
+        )}
+        <Badge className="absolute top-2 right-2 bg-card/90 text-card-foreground border-border text-xs">
+          {formatRange(listing.priceMin, listing.priceMax, listing.currency, listing.duration)}
+        </Badge>
+      </div>
+      <CardContent className="p-3 space-y-2 flex flex-col flex-1">
+        <h3 className="font-bold text-sm leading-tight line-clamp-2">{listing.name}</h3>
+        {listing.locality && (
+          <div className="flex items-center text-xs text-muted-foreground">
+            <MapPin className="w-3 h-3 mr-1 shrink-0" />{listing.locality}
+          </div>
+        )}
+        {listing.nearestPlace && (
+          <p className="text-[10px] text-primary font-medium truncate">
+            {listing.nearestDistance ? `${listing.nearestDistance} · ` : ''}{listing.nearestPlace}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          {beds && <span className="inline-flex items-center gap-1"><BedDouble className="w-3 h-3" />{beds} bed</span>}
+          {baths && <span className="inline-flex items-center gap-1"><Bath className="w-3 h-3" />{baths} bath</span>}
+        </div>
+        {listing.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-0.5">
+            {listing.tags.slice(0, 3).map((t) => (
+              <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground capitalize">{t.replace(/_/g, ' ')}</span>
+            ))}
+          </div>
+        )}
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          className="w-full mt-1 h-7 text-xs gap-1"
+          disabled={!listing.partnerUrl}
+          onClick={() => listing.partnerUrl && window.open(listing.partnerUrl, '_blank', 'noopener,noreferrer')}
+        >
+          <ExternalLink className="w-3 h-3" />
+          View on Amber
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExploreProperties() {
+  const [input, setInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [items, setItems] = useState<AmberListing[]>([]);
+  const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const first = page === 1;
+    first ? setLoading(true) : setLoadingMore(true);
+    setError('');
+    api.accommodations.explore({ page, q: search || undefined })
+      .then((res) => {
+        if (cancelled) return;
+        setItems((prev) => (first ? res.items : [...prev, ...res.items]));
+        setHasNext(res.meta.hasNext);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        const msg = e instanceof ApiError && e.code === 'RATE_LIMITED'
+          ? e.message
+          : 'Could not load properties. Please try again.';
+        setError(msg);
+        if (first) setItems([]);
+      })
+      .finally(() => { if (!cancelled) { setLoading(false); setLoadingMore(false); } });
+    return () => { cancelled = true; };
+  }, [page, search]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    setSearch(input.trim());
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={submit} className="flex gap-2">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search UK properties by name or area..."
+            className="pl-9"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+        </div>
+        <Button type="submit" variant="outline">Search</Button>
+      </form>
+      <p className="text-xs text-muted-foreground">
+        Partner listings from Amber Student · United Kingdom
+      </p>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+      ) : error && items.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-16 text-center">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-muted-foreground max-w-sm">{error}</p>
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-16">No properties found{search ? ` for "${search}"` : ''}.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {items.map((l) => <PropertyCard key={l.id} listing={l} />)}
+          </div>
+          {error && <p className="text-sm text-destructive text-center">{error}</p>}
+          {hasNext && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" disabled={loadingMore} onClick={() => setPage((p) => p + 1)} className="gap-2">
+                {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
+                Load more
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Accommodation() {
   const [items, setItems] = useState<AccommodationType[]>([]);
@@ -374,6 +536,7 @@ export default function Accommodation() {
       <Tabs defaultValue="browse">
         <TabsList>
           <TabsTrigger value="browse">Browse</TabsTrigger>
+          <TabsTrigger value="explore">Explore</TabsTrigger>
           <TabsTrigger value="my-bookings">My Bookings</TabsTrigger>
         </TabsList>
 
@@ -467,6 +630,10 @@ export default function Accommodation() {
               </Button>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="explore" className="mt-4">
+          <ExploreProperties />
         </TabsContent>
 
         <TabsContent value="my-bookings" className="mt-4">

@@ -214,6 +214,35 @@ export interface Accommodation {
   lng: number | null;
 }
 
+/** A normalized listing from the Amber Student partner inventory feed. */
+export interface AmberListing {
+  id: number;
+  name: string;
+  slug: string;
+  locality: string;
+  country: string;
+  currency: string;
+  priceMin: number | null;
+  priceMax: number | null;
+  duration: string | null;
+  image: string | null;
+  types: string[];
+  tags: string[];
+  bedrooms: { min: number | null; max: number | null };
+  bathrooms: { min: number | null; max: number | null };
+  nearestPlace: string | null;
+  nearestDistance: string | null;
+  availableFrom: string | null;
+  lat: number | null;
+  lng: number | null;
+  partnerUrl: string | null;
+}
+
+export interface AmberSearchResult {
+  items: AmberListing[];
+  meta: { page: number; count: number; pages: number; hasNext: boolean };
+}
+
 export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
 
 export interface AccommodationBooking {
@@ -529,6 +558,21 @@ const q = (params: Record<string, string | undefined>) => {
   return s ? `?${s}` : '';
 };
 
+/**
+ * Coalesces concurrent identical GET requests into a single in-flight call.
+ * Without this, React StrictMode's double-mount fires the same request twice
+ * back-to-back (visible as two network calls), which also wastes rate-limited
+ * upstream quota. The second caller joins the first's pending promise.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+function dedupe<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const existing = inFlight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+  const p = run().finally(() => inFlight.delete(key));
+  inFlight.set(key, p);
+  return p;
+}
+
 // ---------- Endpoint groups ----------
 
 export const api = {
@@ -600,6 +644,14 @@ export const api = {
     list: (filters?: { city?: string; type?: string }) =>
       rawRequest<Accommodation[]>(`/accommodations${q({ city: filters?.city, type: filters?.type })}`, { auth: false }),
     get: (id: string) => rawRequest<Accommodation>(`/accommodations/${id}`, { auth: false }),
+    /** Search the Amber Student partner inventory (UK). Requires auth. */
+    explore: (params?: { page?: number; q?: string }) => {
+      const path = `/accommodations/explore${q({
+        page: params?.page != null ? String(params.page) : undefined,
+        q: params?.q || undefined,
+      })}`;
+      return dedupe(path, () => rawRequest<AmberSearchResult>(path));
+    },
     create: (body: Omit<Accommodation, 'id'>) => rawRequest<Accommodation>('/accommodations', { method: 'POST', body }),
     update: (id: string, body: Partial<Omit<Accommodation, 'id'>>) =>
       rawRequest<Accommodation>(`/accommodations/${id}`, { method: 'PUT', body }),

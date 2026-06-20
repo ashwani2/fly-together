@@ -25,14 +25,14 @@ export function SettingsDialog({ open, onOpenChange, scope }: SettingsDialogProp
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px] p-0 border-none overflow-hidden">
-        <ThemeScopeWrapper scope={scope} className="min-h-0 p-6">
+        <ThemeScopeWrapper scope={scope} fullHeight={false} className="p-6">
           <DialogHeader>
             <DialogTitle>Appearance Settings ({scope.charAt(0).toUpperCase() + scope.slice(1)})</DialogTitle>
             <DialogDescription>
               Customize how Fly Together looks and feels for this section.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-6 py-4">
+          <div className="grid gap-4 py-2">
             {scope === 'admin' && (
               <div className="space-y-4">
                 <Label className="text-base">Primary Brand Color</Label>
@@ -59,7 +59,7 @@ export function SettingsDialog({ open, onOpenChange, scope }: SettingsDialogProp
               </div>
             )}
             
-            <div className={cn("flex items-center justify-between pt-6", scope === 'admin' && "border-t")}>
+            <div className={cn("flex items-center justify-between", scope === 'admin' && "border-t pt-6")}>
               <div className="space-y-1">
                 <Label className="text-base">Interface Mode</Label>
                 <p className="text-sm text-muted-foreground">

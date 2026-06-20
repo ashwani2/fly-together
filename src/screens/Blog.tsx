@@ -24,6 +24,7 @@ import { SettingsDialog } from '@/components/SettingsDialog';
 import { Logo } from '@/components/Logo';
 import { AuthModal } from '@/components/AuthModal';
 import { useAuth } from '@/lib/AuthContext';
+import { swal } from '@/lib/swal';
 
 export default function Blog() {
   const navigate = useNavigate();
@@ -73,18 +74,24 @@ export default function Blog() {
     else setAuthOpen(true);
   };
 
+  const showInvestors = () => {
+    setIsMenuOpen(false);
+    swal.info('Our investor relations page is coming soon. Stay tuned!', 'Investors — Coming Soon');
+  };
+
   const Navigation = () => (
-    <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <nav className="sticky top-0 z-50 w-full border-b bg-background/95">
       <div className="container mx-auto px-4 h-20 flex items-center justify-between">
         <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
           <Logo imgClassName="h-14 md:h-16" />
         </Link>
         <div className="hidden md:flex items-center gap-6">
-          <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Home</Link>
           <Link to="/#services" className="text-sm font-medium hover:text-primary transition-colors">Our Services</Link>
           <Link to="/#about" className="text-sm font-medium hover:text-primary transition-colors">About Us</Link>
+          <Link to="/#universities" className="text-sm font-medium hover:text-primary transition-colors">Universities</Link>
           <Link to="/blog" className="text-sm font-medium text-primary font-bold">Blog</Link>
-          
+          <button onClick={showInvestors} className="text-sm font-medium hover:text-primary transition-colors cursor-pointer">Investors</button>
+
           <div className="w-px h-6 bg-border mx-2" />
           
           <Button 
@@ -128,10 +135,11 @@ export default function Blog() {
           animate={{ opacity: 1, y: 0 }}
           className="md:hidden border-b bg-background p-4 space-y-4"
         >
-          <Link to="/" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">Home</Link>
           <Link to="/#services" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">Our Services</Link>
           <Link to="/#about" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">About Us</Link>
+          <Link to="/#universities" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium">Universities</Link>
           <Link to="/blog" onClick={() => setIsMenuOpen(false)} className="block text-lg font-medium text-primary">Blog</Link>
+          <button onClick={showInvestors} className="block w-full text-left text-lg font-medium">Investors</button>
           <Button onClick={handleConnect} className="w-full rounded-full text-lg h-12">
             Student Portal <ArrowRight className="ml-2 w-4 h-4" />
           </Button>

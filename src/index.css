@@ -196,3 +196,15 @@
 .ft-datepicker .rdp-month_caption {
     margin-bottom: 0.4rem;
 }
+/* ── Smooth theme switching ──────────────────────────────────────────────────
+   Color transitions are applied ONLY while actively toggling light/dark (the
+   `theme-transition` class is added to <html> for ~350ms by ThemeContext). This
+   keeps the switch buttery without making every hover/interaction animate. */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease,
+        fill 0.3s ease, stroke 0.3s ease !important;
+    transition-delay: 0s !important;
+}

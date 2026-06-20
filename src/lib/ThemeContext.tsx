@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { cn } from './utils';
 
 type ColorTheme = {
@@ -83,14 +83,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ThemeScopeWrapper({ 
-  scope, 
+export function ThemeScopeWrapper({
+  scope,
   children,
-  className 
-}: { 
-  scope: ThemeScope; 
+  className,
+  fullHeight = true,
+}: {
+  scope: ThemeScope;
   children: React.ReactNode;
   className?: string;
+  fullHeight?: boolean;
 }) {
   const { getTheme } = useTheme();
   const theme = getTheme(scope);
@@ -98,11 +100,24 @@ export function ThemeScopeWrapper({
   // Mirror dark mode onto the document root so portaled UI (dialogs, dropdowns,
   // toasts, the document viewer) — which renders outside this wrapper — is also
   // themed correctly. Without this, modals stay light while the page is dark.
+  const firstRun = useRef(true);
   useEffect(() => {
     const root = document.documentElement;
+
+    // Animate color changes only on an actual switch (not the initial mount),
+    // so the toggle feels smooth but the page doesn't fade in on first paint.
+    let cleanup: number | undefined;
+    if (!firstRun.current) {
+      root.classList.add('theme-transition');
+      cleanup = window.setTimeout(() => root.classList.remove('theme-transition'), 350);
+    }
+    firstRun.current = false;
+
     root.classList.toggle('dark', theme.isDarkMode);
     root.style.setProperty('--primary', `oklch(${theme.primaryColor})`);
     root.style.setProperty('--ring', `oklch(${theme.primaryColor})`);
+
+    return () => window.clearTimeout(cleanup);
   }, [theme.isDarkMode, theme.primaryColor]);
 
   const style = {
@@ -113,7 +128,7 @@ export function ThemeScopeWrapper({
 
   return (
     <div 
-      className={cn(className, theme.isDarkMode ? "dark" : "", "min-h-screen bg-background text-foreground transition-colors duration-300")}
+      className={cn(className, theme.isDarkMode ? "dark" : "", fullHeight && "min-h-screen", "bg-background text-foreground transition-colors duration-300")}
       style={style}
     >
       {children}
