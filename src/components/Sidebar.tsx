@@ -29,6 +29,7 @@ export function Sidebar({ className, onSettingsClick }: { className?: string, on
     { icon: LayoutDashboard, label: 'Explore', path: '/dashboard' },
     { icon: Layers, label: 'Services', path: '/dashboard/services' },
     { icon: FileText, label: 'My Applications', path: '/dashboard/applications' },
+    { icon: Banknote, label: 'My Loans', path: '/dashboard/my-loans' },
     { icon: UserCircle, label: 'Profile & Docs', path: '/dashboard/profile' },
   ];
 

@@ -280,12 +280,94 @@ export interface Testimonial {
   isActive: boolean;
 }
 
+export type LoanStatus =
+  | 'SUBMITTED'
+  | 'UNDER_REVIEW'
+  | 'DOCUMENTS_REQUESTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'DISBURSED';
+
+export interface LoanDocumentEntry {
+  key: string;
+  label: string;
+  status?: string;
+  url?: string | null;
+}
+
+export interface LoanDocumentGroup {
+  category: string;
+  label: string;
+  documents: LoanDocumentEntry[];
+}
+
+export interface LoanDocumentRequest {
+  reason: string;
+  docs: string[];
+  requestedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface LoanDetails {
+  loanPurpose?: string;
+  personalInfo?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    dob?: string | null;
+    address?: string | null;
+    email?: string;
+    phone?: string | null;
+  };
+  educationInfo?: {
+    universityName?: string;
+    course?: string;
+    country?: string;
+    intakeYear?: string;
+    intakeSemester?: string;
+  };
+  financialInfo?: {
+    monthlyIncome?: string;
+    existingEMIs?: string;
+    collateral?: string;
+  };
+  guarantor?: {
+    relation?: string;
+    name?: string;
+    email?: string;
+    mobile?: string;
+  };
+  coApplicant?: {
+    relation?: string;
+    name?: string;
+    email?: string;
+    mobile?: string;
+  };
+  documentGroups?: LoanDocumentGroup[];
+  documentRequest?: LoanDocumentRequest;
+  rejectionReason?: string;
+}
+
 export interface LoanApplication {
   id: string;
   studentId: string;
   amount: string;
-  status: string;
-  details: Record<string, unknown> | null;
+  status: LoanStatus;
+  details: LoanDetails | null;
+  student?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    user: { email: string; phoneNumber: string | null };
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LoanApplicationTimeline {
+  id: string;
+  loanApplicationId: string;
+  action: string;
+  actionTakenBy: string | null;
   createdAt: string;
 }
 
@@ -571,11 +653,25 @@ export const api = {
   },
 
   loans: {
-    create: (body: { amount: string; details?: Record<string, unknown> }) =>
+    create: (body: { amount: string; details?: LoanDetails }) =>
       rawRequest<LoanApplication>('/loans', { method: 'POST', body }),
     list: () => rawRequest<LoanApplication[]>('/loans'),
-    updateStatus: (id: string, status: string) =>
-      rawRequest<LoanApplication>(`/loans/${id}`, { method: 'PATCH', body: { status } }),
+    get: (id: string) => rawRequest<LoanApplication>(`/loans/${id}`),
+    timeline: (id: string) => rawRequest<LoanApplicationTimeline[]>(`/loans/${id}/timeline`),
+    updateStatus: (id: string, status: LoanStatus, documentRequest?: { reason: string; docs: string[] }, reason?: string) =>
+      rawRequest<LoanApplication>(`/loans/${id}`, { method: 'PATCH', body: { status, documentRequest, reason } }),
+    resume: (id: string) =>
+      rawRequest<LoanApplication>(`/loans/${id}/resume`, { method: 'POST' }),
+    updateDocumentStatus: (id: string, docKey: string, status: string) =>
+      rawRequest<LoanApplication>(`/loans/${id}/documents/${docKey}`, { method: 'PATCH', body: { status } }),
+    uploadDocument: (file: File, docKey: string) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('docKey', docKey);
+      return rawRequest<{ key: string; signedPath: string }>('/loans/documents', { method: 'POST', form: fd });
+    },
+    documentViewUrl: (key: string) =>
+      rawRequest<{ url: string }>('/loans/documents/url', { method: 'POST', body: { key } }),
   },
 
   applications: {

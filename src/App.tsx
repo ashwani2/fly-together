@@ -10,6 +10,7 @@ const Marketplace = lazy(() => import('./screens/Marketplace'));
 const Accommodation = lazy(() => import('./screens/Accommodation'));
 const Services = lazy(() => import('./screens/Services'));
 const LoanApplication = lazy(() => import('./screens/LoanApplication'));
+const MyLoanApplications = lazy(() => import('./screens/MyLoanApplications'));
 const Applications = lazy(() => import('./screens/Applications'));
 const Admin = lazy(() => import('./screens/Admin'));
 const AdminAgents = lazy(() => import('./screens/AdminAgents'));
@@ -77,6 +78,7 @@ export default function App() {
                 <Route path="profile" element={<Profile />} />
                 <Route path="services" element={<Services />} />
                 <Route path="loan-application" element={<LoanApplication />} />
+                <Route path="my-loans" element={<MyLoanApplications />} />
                 <Route path="accommodation" element={<Accommodation />} />
                 <Route path="applications" element={<Applications />} />
                 <Route path="market" element={<Marketplace />} />
