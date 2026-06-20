@@ -33,6 +33,7 @@ import { ThemeProvider } from './lib/ThemeContext';
 import { SwalHost } from './lib/swal';
 import { ToastHost } from './lib/toast';
 import { LoadingScreen } from './components/LoadingScreen';
+import { UploadingOverlay } from './components/UploadingOverlay';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 'student' | 'admin' | 'agent' }) {
   const { user, role: userRole, loading } = useAuth();
@@ -64,6 +65,7 @@ export default function App() {
       <AuthProvider>
         <SwalHost />
         <ToastHost />
+        <UploadingOverlay />
         <Router>
           <Suspense fallback={<LoadingScreen />}>
             <Routes>

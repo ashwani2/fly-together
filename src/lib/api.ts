@@ -59,6 +59,23 @@ interface RequestOptions {
   _retried?: boolean;
 }
 
+// ---------- Global upload activity (for the branded uploading loader) ----------
+// Any request that sends FormData is treated as an "upload". Components can
+// subscribe to show a logo loader while one or more uploads are in flight.
+let activeUploads = 0;
+const uploadListeners = new Set<(active: number) => void>();
+function emitUploadActivity() {
+  for (const fn of uploadListeners) fn(activeUploads);
+}
+export const uploadActivity = {
+  /** Subscribe to the in-flight upload count; returns an unsubscribe fn. */
+  subscribe(fn: (active: number) => void): () => void {
+    uploadListeners.add(fn);
+    fn(activeUploads);
+    return () => uploadListeners.delete(fn);
+  },
+};
+
 async function rawRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true, form } = opts;
   const headers: Record<string, string> = {};
@@ -72,32 +89,46 @@ async function rawRequest<T>(path: string, opts: RequestOptions = {}): Promise<T
     payload = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, { method, headers, body: payload });
+  // Count this as an active upload (skip on the internal 401-refresh retry so it
+  // isn't double-counted).
+  const isUpload = !!form && !opts._retried;
+  if (isUpload) {
+    activeUploads++;
+    emitUploadActivity();
+  }
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, { method, headers, body: payload });
 
-  // 204 / empty
-  if (res.status === 204) return undefined as T;
+    // 204 / empty
+    if (res.status === 204) return undefined as T;
 
-  let json: any = null;
-  const text = await res.text();
-  if (text) {
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = null;
+    let json: any = null;
+    const text = await res.text();
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+    }
+
+    if (!res.ok) {
+      // Try a single refresh on 401, then retry the original request.
+      if (res.status === 401 && auth && !opts._retried && tokenStore.refresh) {
+        const refreshed = await tryRefresh();
+        if (refreshed) return rawRequest<T>(path, { ...opts, _retried: true });
+      }
+      const err = json?.error;
+      throw new ApiError(res.status, err?.code ?? 'ERROR', err?.message ?? res.statusText, err?.details);
+    }
+
+    return (json?.data ?? json) as T;
+  } finally {
+    if (isUpload) {
+      activeUploads--;
+      emitUploadActivity();
     }
   }
-
-  if (!res.ok) {
-    // Try a single refresh on 401, then retry the original request.
-    if (res.status === 401 && auth && !opts._retried && tokenStore.refresh) {
-      const refreshed = await tryRefresh();
-      if (refreshed) return rawRequest<T>(path, { ...opts, _retried: true });
-    }
-    const err = json?.error;
-    throw new ApiError(res.status, err?.code ?? 'ERROR', err?.message ?? res.statusText, err?.details);
-  }
-
-  return (json?.data ?? json) as T;
 }
 
 let refreshing: Promise<boolean> | null = null;

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev:uat": "vite --mode uat --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "build:uat": "vite build --mode uat",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },

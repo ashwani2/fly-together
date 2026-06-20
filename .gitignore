@@ -4,4 +4,5 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.uat.example
 build
