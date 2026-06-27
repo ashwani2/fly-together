@@ -18,6 +18,8 @@ import {
   GraduationCap,
   Undo2,
   Video,
+  Clock,
+  ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -107,15 +109,15 @@ export default function Agent() {
 
   // Verify-documents dialog
   const [selected, setSelected] = useState<AgentApplication | null>(null);
-  const [meetings, setMeetings] = useState<ApplicationTimelineEntry[]>([]);
+  const [timeline, setTimeline] = useState<ApplicationTimelineEntry[]>([]);
 
-  // Load the selected application's scheduled meetings (from its timeline).
+  // Load the selected application's activity timeline.
   useEffect(() => {
-    if (!selected) { setMeetings([]); return; }
+    if (!selected) { setTimeline([]); return; }
     let active = true;
     api.applications.timeline(selected.id)
-      .then((entries) => { if (active) setMeetings(entries.filter((e) => e.action === 'MEETING_SCHEDULED' && e.meetingLink)); })
-      .catch(() => { if (active) setMeetings([]); });
+      .then((entries) => { if (active) setTimeline(entries); })
+      .catch(() => { if (active) setTimeline([]); });
     return () => { active = false; };
   }, [selected?.id]);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
@@ -175,7 +177,7 @@ export default function Agent() {
     setApps((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: target } : x)));
     setSelected((cur) => (cur && cur.id === a.id ? { ...cur, status: target } : cur));
     try {
-      await api.applications.setStatus(a.id, target);
+      await api.applications.setStatus(a.id, target, undefined, true);
       toast.success(`${a.student.name}'s application moved back to “${STATUS_LABELS[target]}”.`, 'Phase rolled back');
     } catch (e: any) {
       swal.error(e?.message || 'Could not roll back the status.');
@@ -529,30 +531,49 @@ export default function Agent() {
               )}
             </div>
 
-            {meetings.length > 0 && (
+            {timeline.length > 0 && (
               <div className="space-y-3">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Scheduled Meetings</h3>
-                <div className="space-y-2">
-                  {meetings.map((m) => (
-                    <div key={m.id} className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
-                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        <Video className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold">Google Meet</p>
-                        {m.meetingAt && <p className="text-[11px] text-muted-foreground">{new Date(m.meetingAt).toLocaleString()}</p>}
-                      </div>
-                      <a
-                        href={m.meetingLink!}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline shrink-0"
-                      >
-                        <Video className="w-3.5 h-3.5" /> Join
-                      </a>
-                    </div>
-                  ))}
-                </div>
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Activity Timeline</h3>
+                <ol className="relative border-l border-border ml-2 space-y-4">
+                  {timeline.map((t) => {
+                    const isMeeting = t.action === 'MEETING_SCHEDULED';
+                    const isRollback = t.action.startsWith('ROLLBACK_');
+                    const rolledTo = isRollback
+                      ? STATUS_LABELS[t.action.slice('ROLLBACK_'.length) as ApplicationStatus] ?? t.action.slice('ROLLBACK_'.length).replace(/_/g, ' ')
+                      : '';
+                    return (
+                      <li key={t.id} className="ml-4">
+                        <div className={cn('absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full', isRollback ? 'bg-amber-500' : 'bg-primary')} />
+                        <div className="flex items-center gap-2">
+                          {isMeeting
+                            ? <Video className="w-3.5 h-3.5 text-primary" />
+                            : isRollback
+                              ? <Undo2 className="w-3.5 h-3.5 text-amber-500" />
+                              : <ChevronRight className="w-3.5 h-3.5 text-primary" />}
+                          <span className={cn('text-sm font-medium', isRollback && 'text-amber-600')}>
+                            {isMeeting ? 'Google Meet scheduled' : isRollback ? `Rolled back to ${rolledTo}` : t.action.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3" /> {new Date(t.createdAt).toLocaleString()}
+                        </p>
+                        {isMeeting && t.meetingLink && (
+                          <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+                            {t.meetingAt && <p className="text-xs font-medium text-foreground">{new Date(t.meetingAt).toLocaleString()}</p>}
+                            <a
+                              href={t.meetingLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                            >
+                              <Video className="w-3.5 h-3.5" /> Join Google Meet
+                            </a>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
               </div>
             )}
           </div>

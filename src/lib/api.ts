@@ -817,8 +817,8 @@ export const api = {
     list: () => rawRequest<Application[]>('/applications'),
     get: (id: string) => rawRequest<Application>(`/applications/${id}`),
     timeline: (id: string) => rawRequest<ApplicationTimelineEntry[]>(`/applications/${id}/timeline`),
-    setStatus: (id: string, status: ApplicationStatus, rejectionReason?: string) =>
-      rawRequest<Application>(`/applications/${id}/status`, { method: 'PATCH', body: { status, rejectionReason } }),
+    setStatus: (id: string, status: ApplicationStatus, rejectionReason?: string, rollback?: boolean) =>
+      rawRequest<Application>(`/applications/${id}/status`, { method: 'PATCH', body: { status, rejectionReason, rollback } }),
     /** Schedule a Google Meet (admin/agent) → emails the student + records on the timeline. */
     scheduleMeeting: (id: string, body: { scheduledAt: string; meetLink: string; note?: string }) =>
       rawRequest<Application>(`/applications/${id}/meeting`, { method: 'POST', body }),

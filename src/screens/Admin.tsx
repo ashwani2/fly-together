@@ -370,7 +370,7 @@ export default function Admin() {
     setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: target } : a)));
     setSelected((cur) => (cur && cur.id === application.id ? { ...cur, status: target } : cur));
     try {
-      await api.applications.setStatus(application.id, target);
+      await api.applications.setStatus(application.id, target, undefined, true);
       if (selected?.id === application.id) {
         api.applications.timeline(application.id).then(setTimeline).catch(() => {});
       }
@@ -1461,37 +1461,46 @@ export default function Admin() {
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
               ) : timeline.length > 0 ? (
                 <ol className="relative border-l border-border ml-2 space-y-4">
-                  {timeline.map((t) => (
-                    <li key={t.id} className="ml-4">
-                      <div className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full bg-primary" />
-                      <div className="flex items-center gap-2">
-                        {t.action === 'MEETING_SCHEDULED'
-                          ? <Video className="w-3.5 h-3.5 text-primary" />
-                          : <ChevronRight className="w-3.5 h-3.5 text-primary" />}
-                        <span className="text-sm font-medium">
-                          {t.action === 'MEETING_SCHEDULED' ? 'Google Meet scheduled' : t.action.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <Clock className="w-3 h-3" /> {fmtDate(t.createdAt)}
-                      </p>
-                      {t.action === 'MEETING_SCHEDULED' && t.meetingLink && (
-                        <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
-                          {t.meetingAt && (
-                            <p className="text-xs font-medium text-foreground">{new Date(t.meetingAt).toLocaleString()}</p>
-                          )}
-                          <a
-                            href={t.meetingLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                          >
-                            <Video className="w-3.5 h-3.5" /> Join Google Meet
-                          </a>
+                  {timeline.map((t) => {
+                    const isMeeting = t.action === 'MEETING_SCHEDULED';
+                    const isRollback = t.action.startsWith('ROLLBACK_');
+                    const rolledTo = isRollback
+                      ? STATUS_LABELS[t.action.slice('ROLLBACK_'.length) as ApplicationStatus] ?? t.action.slice('ROLLBACK_'.length).replace(/_/g, ' ')
+                      : '';
+                    return (
+                      <li key={t.id} className="ml-4">
+                        <div className={cn('absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full', isRollback ? 'bg-amber-500' : 'bg-primary')} />
+                        <div className="flex items-center gap-2">
+                          {isMeeting
+                            ? <Video className="w-3.5 h-3.5 text-primary" />
+                            : isRollback
+                              ? <Undo2 className="w-3.5 h-3.5 text-amber-500" />
+                              : <ChevronRight className="w-3.5 h-3.5 text-primary" />}
+                          <span className={cn('text-sm font-medium', isRollback && 'text-amber-600')}>
+                            {isMeeting ? 'Google Meet scheduled' : isRollback ? `Rolled back to ${rolledTo}` : t.action.replace(/_/g, ' ')}
+                          </span>
                         </div>
-                      )}
-                    </li>
-                  ))}
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3" /> {fmtDate(t.createdAt)}
+                        </p>
+                        {isMeeting && t.meetingLink && (
+                          <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+                            {t.meetingAt && (
+                              <p className="text-xs font-medium text-foreground">{new Date(t.meetingAt).toLocaleString()}</p>
+                            )}
+                            <a
+                              href={t.meetingLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                            >
+                              <Video className="w-3.5 h-3.5" /> Join Google Meet
+                            </a>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ol>
               ) : (
                 <p className="text-sm text-muted-foreground">No activity recorded yet.</p>

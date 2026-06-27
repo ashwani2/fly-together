@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  CheckCircle2, Clock, CreditCard, ShieldCheck, Loader2, GraduationCap, Plus, ChevronRight, XCircle, RefreshCw, Video,
+  CheckCircle2, Clock, CreditCard, ShieldCheck, Loader2, GraduationCap, Plus, ChevronRight, XCircle, RefreshCw, Video, Undo2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,10 @@ const prettyStatus: Record<string, string> = {
 };
 
 const prettyAction = (action: string) => {
+  if (action.startsWith('ROLLBACK_')) {
+    const s = action.slice('ROLLBACK_'.length);
+    return `Moved back to ${prettyStatus[s] ?? s.replace(/_/g, ' ')}`;
+  }
   const stripped = action.replace(/^STATUS_/, '').replace(/^PAYMENT_/, 'PAYMENT_');
   return prettyStatus[stripped] ?? stripped.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 };
@@ -179,15 +183,20 @@ export default function Applications() {
                   <div className="space-y-6">
                     {timeline.map((item, idx) => {
                       const isLast = idx === timeline.length - 1;
+                      const isRollback = item.action.startsWith('ROLLBACK_');
                       return (
                         <div key={item.id} className="relative flex gap-4">
                           <div
                             className={cn(
                               'flex items-center justify-center w-10 h-10 rounded-full border border-card shadow shrink-0 z-10',
-                              isLast ? 'bg-background border-primary text-primary animate-pulse' : 'bg-primary text-primary-foreground',
+                              isRollback
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : isLast
+                                ? 'bg-background border-primary text-primary animate-pulse'
+                                : 'bg-primary text-primary-foreground',
                             )}
                           >
-                            {isLast ? <Clock className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                            {isRollback ? <Undo2 className="w-5 h-5" /> : isLast ? <Clock className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                           </div>
                           <div className="flex-1 p-4 rounded-xl border bg-card shadow-sm">
                             <div className="flex items-center justify-between gap-2 mb-1">
@@ -212,7 +221,9 @@ export default function Applications() {
                                     </a>
                                   )}
                                 </div>
-                              ) : item.action === 'CREATED'
+                              ) : isRollback
+                                ? 'Your application was moved back to a previous phase by the Fly Together team.'
+                                : item.action === 'CREATED'
                                 ? 'Your application was submitted.'
                                 : item.action.startsWith('REUPLOAD_REQUESTED')
                                 ? 'A document was rejected during review. Please re-upload it from Profile & Documents.'
