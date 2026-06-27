@@ -42,7 +42,7 @@ export const mockTestimonials: Testimonial[] = [
     content: 'The journey from application to arrival was seamless. UniFlow handled all my documents and even helped me find a great studio apartment near campus.',
     mediaUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800',
     mediaType: 'image',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aarav',
+    avatarUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
     date: '2024-02-15'
   },
   {
@@ -52,7 +52,7 @@ export const mockTestimonials: Testimonial[] = [
     content: 'Getting my visa and student loan was my biggest worry, but the team here made it look easy. Highly recommend their education loan assistance!',
     mediaUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=800',
     mediaType: 'image',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Priya',
+    avatarUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
     date: '2024-01-20'
   },
   {
@@ -62,7 +62,7 @@ export const mockTestimonials: Testimonial[] = [
     content: 'The logistics service was a lifesaver. My 30kg of books and clothes reached my room even before I landed. Brilliant support!',
     mediaUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800',
     mediaType: 'image',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
+    avatarUrl: 'https://randomuser.me/api/portraits/men/67.jpg',
     date: '2024-03-05'
   }
 ];

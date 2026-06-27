@@ -16,6 +16,8 @@ import {
   Mail,
   Phone,
   GraduationCap,
+  Undo2,
+  Video,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -40,7 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { api, docLabel, type AgentApplication, type ApplicationStatus, type DocStatus, type StudentDocument } from '@/lib/api';
+import { api, docLabel, type AgentApplication, type ApplicationStatus, type ApplicationTimelineEntry, type DocStatus, type StudentDocument } from '@/lib/api';
 import { swal } from '@/lib/swal';
 import { toast } from '@/lib/toast';
 import { InitialsAvatar } from '@/components/InitialsAvatar';
@@ -85,6 +87,13 @@ const nextStatus = (s: ApplicationStatus): ApplicationStatus | null => {
   return STATUS_ORDER[idx + 1];
 };
 
+// Previous phase in the pipeline — used to roll an application back a step.
+const prevStatus = (s: ApplicationStatus): ApplicationStatus | null => {
+  const idx = STATUS_ORDER.indexOf(s);
+  if (idx <= 0) return null;
+  return STATUS_ORDER[idx - 1];
+};
+
 const docBadge = (status: DocStatus) =>
   status === 'VERIFIED' ? 'bg-green-500/10 text-green-600' :
   status === 'REJECTED' ? 'bg-red-500/10 text-red-600' :
@@ -98,6 +107,17 @@ export default function Agent() {
 
   // Verify-documents dialog
   const [selected, setSelected] = useState<AgentApplication | null>(null);
+  const [meetings, setMeetings] = useState<ApplicationTimelineEntry[]>([]);
+
+  // Load the selected application's scheduled meetings (from its timeline).
+  useEffect(() => {
+    if (!selected) { setMeetings([]); return; }
+    let active = true;
+    api.applications.timeline(selected.id)
+      .then((entries) => { if (active) setMeetings(entries.filter((e) => e.action === 'MEETING_SCHEDULED' && e.meetingLink)); })
+      .catch(() => { if (active) setMeetings([]); });
+    return () => { active = false; };
+  }, [selected?.id]);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
   const [savingDocId, setSavingDocId] = useState<string | null>(null);
   const [docViewer, setDocViewer] = useState<{ url: string; title: string; type: string } | null>(null);
@@ -140,6 +160,25 @@ export default function Agent() {
       toast.success(`${a.student.name}'s application moved to “${STATUS_LABELS[target]}”.`, 'Application advanced');
     } catch (e: any) {
       swal.error(e?.message || 'Could not update status.');
+      load();
+    }
+  };
+
+  const handleRollback = async (a: AgentApplication) => {
+    const target = prevStatus(a.status);
+    if (!target) return;
+    const ok = await swal.confirm(
+      `Move ${a.student.name}'s application back to “${STATUS_LABELS[target]}”? The student will be notified by email.`,
+      { title: 'Roll back a phase?', confirmText: 'Roll back', variant: 'warning' },
+    );
+    if (!ok) return;
+    setApps((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: target } : x)));
+    setSelected((cur) => (cur && cur.id === a.id ? { ...cur, status: target } : cur));
+    try {
+      await api.applications.setStatus(a.id, target);
+      toast.success(`${a.student.name}'s application moved back to “${STATUS_LABELS[target]}”.`, 'Phase rolled back');
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not roll back the status.');
       load();
     }
   };
@@ -371,6 +410,14 @@ export default function Agent() {
                               Verify Docs <Eye className="w-3.5 h-3.5" />
                             </Button>
                             <button
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-md text-amber-500 hover:bg-amber-500/10 disabled:opacity-30"
+                              onClick={() => handleRollback(a)}
+                              disabled={a.status === 'REJECTED' || !prevStatus(a.status)}
+                              title="Roll back to previous phase"
+                            >
+                              <Undo2 className="w-4 h-4" />
+                            </button>
+                            <button
                               className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10 disabled:opacity-30"
                               onClick={() => handleAdvance(a)}
                               disabled={a.status === 'COMPLETED' || a.status === 'REJECTED' || !nextStatus(a.status)}
@@ -481,6 +528,33 @@ export default function Agent() {
                 </div>
               )}
             </div>
+
+            {meetings.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Scheduled Meetings</h3>
+                <div className="space-y-2">
+                  {meetings.map((m) => (
+                    <div key={m.id} className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <Video className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">Google Meet</p>
+                        {m.meetingAt && <p className="text-[11px] text-muted-foreground">{new Date(m.meetingAt).toLocaleString()}</p>}
+                      </div>
+                      <a
+                        href={m.meetingLink!}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline shrink-0"
+                      >
+                        <Video className="w-3.5 h-3.5" /> Join
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex-none p-4 border-t bg-muted/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -501,6 +575,11 @@ export default function Agent() {
                   onClick={() => { setRejectTarget(selected); setRejectReason(''); }}
                 >
                   <XCircle className="w-4 h-4" /> Reject
+                </Button>
+              )}
+              {selected && selected.status !== 'REJECTED' && prevStatus(selected.status) && (
+                <Button variant="outline" className="gap-2" onClick={() => handleRollback(selected)}>
+                  <Undo2 className="w-4 h-4" /> Roll back to {STATUS_LABELS[prevStatus(selected.status)!]}
                 </Button>
               )}
               {selected && nextStatus(selected.status) && (

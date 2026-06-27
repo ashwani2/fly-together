@@ -338,6 +338,7 @@ export interface Testimonial {
   mediaType: MediaType;
   avatarUrl: string | null;
   isActive: boolean;
+  createdAt: string;
 }
 
 export type LoanStatus =
@@ -441,6 +442,32 @@ export type ApplicationStatus =
   | 'PAYMENT_PENDING'
   | 'COMPLETED';
 export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
+
+/** Raw Flywire lifecycle status. */
+export type FlywireStatus = 'PENDING' | 'INITIATED' | 'GUARANTEED' | 'DELIVERED' | 'CANCELLED';
+
+export interface FlywirePayment {
+  id: string;
+  flywireId: string;
+  reference: string | null;
+  payLink: string | null;
+  flywireStatus: FlywireStatus;
+  amount: number; // currency subunit
+  currency: string;
+  destinationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Human-readable label for a Flywire lifecycle status. */
+export const FLYWIRE_STATUS_LABELS: Record<FlywireStatus, string> = {
+  PENDING: 'Awaiting payment',
+  INITIATED: 'Payment started',
+  GUARANTEED: 'Funds received',
+  DELIVERED: 'Funds delivered',
+  CANCELLED: 'Cancelled',
+};
+
 export interface Application {
   id: string;
   studentId: string;
@@ -450,6 +477,7 @@ export interface Application {
   rejectionReason: string | null;
   paymentLink: string | null;
   paymentStatus: PaymentStatus;
+  flywirePayment?: FlywirePayment | null;
   createdAt: string;
 }
 export interface ApplicationTimelineEntry {
@@ -457,6 +485,9 @@ export interface ApplicationTimelineEntry {
   applicationId: string;
   action: string;
   actionTakenBy: string | null;
+  /** Set on MEETING_SCHEDULED entries — the Google Meet link and scheduled time. */
+  meetingLink?: string | null;
+  meetingAt?: string | null;
   createdAt: string;
 }
 
@@ -506,6 +537,23 @@ export interface Paginated<T> {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+/** A lead captured from the public landing-page SOP generator. */
+export interface SopLead {
+  id: string;
+  fullName: string;
+  country: string | null;
+  university: string;
+  campus: string | null;
+  course: string;
+  createdAt: string;
+}
+
+export interface AdminSopLeadsQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
 }
 
 export interface AdminApplicationsQuery {
@@ -733,6 +781,12 @@ export const api = {
     update: (id: string, body: Partial<Omit<Testimonial, 'id'>>) =>
       rawRequest<Testimonial>(`/testimonials/${id}`, { method: 'PUT', body }),
     remove: (id: string) => rawRequest<{ success: boolean }>(`/testimonials/${id}`, { method: 'DELETE' }),
+    /** Upload a testimonial headshot (admin) → returns a permanent public URL. */
+    uploadImage: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return rawRequest<{ url: string }>('/testimonials/upload-image', { form });
+    },
   },
 
   loans: {
@@ -765,8 +819,17 @@ export const api = {
     timeline: (id: string) => rawRequest<ApplicationTimelineEntry[]>(`/applications/${id}/timeline`),
     setStatus: (id: string, status: ApplicationStatus, rejectionReason?: string) =>
       rawRequest<Application>(`/applications/${id}/status`, { method: 'PATCH', body: { status, rejectionReason } }),
+    /** Schedule a Google Meet (admin/agent) → emails the student + records on the timeline. */
+    scheduleMeeting: (id: string, body: { scheduledAt: string; meetLink: string; note?: string }) =>
+      rawRequest<Application>(`/applications/${id}/meeting`, { method: 'POST', body }),
     setPayment: (id: string, paymentStatus: PaymentStatus, paymentLink?: string) =>
       rawRequest<Application>(`/applications/${id}/payment`, { method: 'PATCH', body: { paymentStatus, paymentLink } }),
+    /** Admin/agent: initialize a real Flywire payment (amount in major units, e.g. EUR). */
+    initializeFlywire: (id: string, amount: number) =>
+      rawRequest<Application>(`/applications/${id}/flywire/initialize`, { method: 'POST', body: { amount } }),
+    /** Pull the latest status from Flywire (no callbacks configured). */
+    refreshFlywire: (id: string) =>
+      rawRequest<Application>(`/applications/${id}/flywire/refresh`, { method: 'POST' }),
   },
 
   admin: {
@@ -828,6 +891,29 @@ export const api = {
       }
       return json.sop as string;
     },
+  },
+
+  sopLeads: {
+    /**
+     * Record a landing-page SOP generation as a lead. Public (no auth) — the
+     * generator itself needs no account, so leads are captured anonymously.
+     */
+    capture: (input: {
+      fullName: string;
+      country?: string;
+      university: string;
+      campus?: string;
+      course: string;
+    }) => rawRequest<SopLead>('/sop-leads', { method: 'POST', body: input, auth: false }),
+    /** Admin: paginated list of captured SOP leads (newest first). */
+    list: (params: AdminSopLeadsQuery = {}) =>
+      rawRequest<Paginated<SopLead>>(
+        `/sop-leads${q({
+          page: params.page != null ? String(params.page) : undefined,
+          pageSize: params.pageSize != null ? String(params.pageSize) : undefined,
+          search: params.search || undefined,
+        })}`,
+      ),
   },
 
   notifications: {

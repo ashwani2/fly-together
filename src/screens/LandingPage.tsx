@@ -9,16 +9,12 @@ import {
   CheckCircle2,
   Plane,
   Home,
-  CreditCard,
   Phone,
-  FileCheck,
-  Truck,
   Menu,
   X,
   ChevronLeft,
   ChevronRight,
   Quote,
-  Video,
   Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +26,7 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { Logo } from "@/components/Logo";
 import { HeroGlobe } from "@/components/HeroGlobe";
 import { AuthModal } from "@/components/AuthModal";
+import { SopGenerator } from "@/components/SopGenerator";
 import heroImage from "../../assets/images/Hero.png";
 import { Moon, Sun, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -207,7 +204,9 @@ export default function LandingPage() {
               mediaUrl: t.mediaUrl,
               mediaType: t.mediaType === "VIDEO" ? "video" : "image",
               avatarUrl: t.avatarUrl ?? undefined,
-              date: "",
+              date: t.createdAt
+                ? new Date(t.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                : "",
             })),
           );
         }
@@ -312,6 +311,12 @@ export default function LandingPage() {
                 About Us
               </a>
               <a
+                href="#sop"
+                className="text-sm font-medium hover:text-primary transition-colors"
+              >
+                SOP Generator
+              </a>
+              <a
                 href="#universities"
                 className="text-sm font-medium hover:text-primary transition-colors"
               >
@@ -391,6 +396,13 @@ export default function LandingPage() {
                 className="block text-lg font-medium"
               >
                 About Us
+              </a>
+              <a
+                href="#sop"
+                onClick={() => setIsMenuOpen(false)}
+                className="block text-lg font-medium"
+              >
+                SOP Generator
               </a>
               <a
                 href="#universities"
@@ -751,21 +763,6 @@ export default function LandingPage() {
                   desc: "Finding safe, comfortable, and affordable housing options tailored for international students.",
                 },
                 {
-                  icon: FileCheck,
-                  title: "Document-Checklist",
-                  desc: "Comprehensive assistance in preparing and verifying all necessary documents for admission and visa.",
-                },
-                {
-                  icon: CreditCard,
-                  title: "Online Payment",
-                  desc: "Secure and easy-to-use platform for managing university deposits and service fees.",
-                },
-                {
-                  icon: Truck,
-                  title: "RoyalRahi Global Logistics",
-                  desc: "Reliable logistics support for moving your belongings to your new study destination safely.",
-                },
-                {
                   icon: Plane,
                   title: "Ticket Booking",
                   desc: "Hassle-free flight booking services tailored for student travel needs and budgets.",
@@ -803,6 +800,32 @@ export default function LandingPage() {
                 </Reveal>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* SOP Generator Section */}
+        <section
+          id="sop"
+          className="relative overflow-hidden py-16 md:py-24"
+        >
+          {/* Atmosphere: soft brand glow orbs */}
+          <div className="pointer-events-none absolute -left-24 top-0 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
+          <div className="pointer-events-none absolute -right-24 bottom-0 h-72 w-72 rounded-full bg-secondary/10 blur-3xl" />
+          <div className="container relative mx-auto px-4">
+            <Reveal className="mx-auto mb-12 max-w-3xl space-y-5 text-center">
+              <Eyebrow>AI-Powered Tool</Eyebrow>
+              <h2 className="font-outfit text-4xl font-bold tracking-tight md:text-5xl">
+                Craft Your <span className="text-primary">Statement of Purpose</span>
+              </h2>
+              <p className="text-lg leading-relaxed text-muted-foreground">
+                Tell us a few details about you and your dream course — our AI drafts a
+                tailored, professional SOP for free. Sign in only when you're ready to
+                download it as a PDF or Word document.
+              </p>
+            </Reveal>
+            <Reveal delay={0.1}>
+              <SopGenerator />
+            </Reveal>
           </div>
         </section>
 
@@ -869,127 +892,141 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Testimonials Section */}
-        <section className="py-16 md:py-20 bg-primary/5 overflow-hidden">
+        {/* Testimonials Section — student testimonials along a curve */}
+        <section className="py-16 md:py-24 bg-muted/30 overflow-hidden">
           <div className="container mx-auto px-4">
-            <Reveal className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-              <div className="space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                  <Quote className="w-4 h-4" />
-                  <span>Student Success Stories</span>
-                </div>
-                <h2 className="font-outfit text-4xl md:text-5xl font-bold tracking-tight">
-                  Voices of Inspiration
-                </h2>
-              </div>
-              <div className="flex gap-4">
-                <Button
-                  size="icon"
-                  onClick={prevTestimonial}
-                  className="rounded-full h-12 w-12 bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
-                >
-                  <ChevronLeft className="w-6 h-6" />
-                </Button>
-                <Button
-                  size="icon"
-                  onClick={nextTestimonial}
-                  className="rounded-full h-12 w-12 bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
-                >
-                  <ChevronRight className="w-6 h-6" />
-                </Button>
-              </div>
+            <Reveal className="mb-12 space-y-3">
+              <span className="block h-1 w-12 rounded-full bg-primary" />
+              <h2 className="font-outfit text-3xl md:text-4xl font-bold tracking-tight">
+                Student Testimonials
+              </h2>
             </Reveal>
 
-            <div className="relative">
-              <AnimatePresence mode="wait">
-                {testimonialList.length > 0 && (
-                  <motion.div
-                    key={testimonialList[currentTestimonialIdx].id}
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
-                    transition={{ duration: 0.5 }}
-                    className="grid lg:grid-cols-2 gap-12 items-center"
-                  >
-                    <div className="order-2 lg:order-1 space-y-6">
-                      <Quote className="w-16 h-16 text-primary/10 -mb-4 -ml-4" />
-                      <p className="text-2xl md:text-3xl font-medium leading-relaxed italic text-foreground/90">
-                        "{testimonialList[currentTestimonialIdx].content}"
-                      </p>
+            {testimonialList.length > 0 && (
+              <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-16">
+                {/* Reviewer rail — photos ride a curve; the centered (active) one
+                    grows while the ones being passed shrink. */}
+                <div className="lg:col-span-5">
+                  <div className="relative mx-auto h-[400px] w-full max-w-[340px]">
+                    {/* Curved guide line */}
+                    <svg
+                      viewBox="0 0 340 400"
+                      preserveAspectRatio="none"
+                      className="absolute inset-0 h-full w-full text-primary/50"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M 30 16 Q 152 200 30 384"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeDasharray="2 9"
+                        strokeLinecap="round"
+                      />
+                    </svg>
 
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full border-2 border-primary overflow-hidden shadow-lg">
+                    {/* Photos */}
+                    {testimonialList.map((t, i) => {
+                      const offset = i - currentTestimonialIdx;
+                      const abs = Math.abs(offset);
+                      const hidden = abs > 2;
+                      const size = offset === 0 ? 108 : abs === 1 ? 62 : 46;
+                      const x = 84 - offset * offset * 15; // parabola → active sits rightmost (curve bulges right)
+                      const y = offset * 82;
+                      const opacity = hidden ? 0 : offset === 0 ? 1 : abs === 1 ? 0.85 : 0.4;
+                      return (
+                        <motion.button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setCurrentTestimonialIdx(i)}
+                          aria-label={`Show review from ${t.studentName}`}
+                          aria-hidden={hidden}
+                          className={cn(
+                            "absolute left-0 top-1/2 overflow-hidden rounded-full bg-muted shadow-lg",
+                            offset === 0
+                              ? "ring-4 ring-primary/30 ring-offset-2 ring-offset-muted/30"
+                              : "ring-2 ring-background",
+                          )}
+                          style={{ zIndex: 30 - abs, pointerEvents: hidden ? "none" : "auto" }}
+                          initial={false}
+                          animate={{ x, y, width: size, height: size, marginTop: -size / 2, marginLeft: -size / 2, opacity }}
+                          transition={{ type: "spring", stiffness: 210, damping: 26 }}
+                        >
                           <img
-                            src={
-                              testimonialList[currentTestimonialIdx].avatarUrl
-                            }
-                            alt={
-                              testimonialList[currentTestimonialIdx].studentName
-                            }
-                            className="w-full h-full object-cover"
+                            src={t.avatarUrl}
+                            alt={t.studentName}
+                            className="h-full w-full object-cover object-center"
                           />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-xl font-bold">
+                        </motion.button>
+                      );
+                    })}
+
+                    {/* Active person's name / university / date, beside the big photo */}
+                    <div className="pointer-events-none absolute left-[160px] top-1/2 -translate-y-1/2">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={testimonialList[currentTestimonialIdx].id}
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <p className="text-xl font-bold tracking-tight">
                             {testimonialList[currentTestimonialIdx].studentName}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {
-                              testimonialList[currentTestimonialIdx]
-                                .universityName
-                            }
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="order-1 lg:order-2 relative aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl border-4 border-background group">
-                      {testimonialList[currentTestimonialIdx].mediaType ===
-                      "image" ? (
-                        <img
-                          src={testimonialList[currentTestimonialIdx].mediaUrl}
-                          alt="Student success"
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-slate-900 flex items-center justify-center">
-                          <Video className="w-16 h-16 text-white/50" />
-                          <p className="absolute bottom-4 left-4 text-white p-2 rounded-lg bg-black/50 text-xs flex items-center gap-2">
-                            <Video className="w-3 h-3" /> Video Testimonial
                           </p>
-                          {/* In a real app, use a video player here */}
-                          <iframe
-                            className="w-full h-full"
-                            src={testimonialList[
-                              currentTestimonialIdx
-                            ].mediaUrl.replace("watch?v=", "embed/")}
-                            title="Video testimony"
-                            allowFullScreen
-                          ></iframe>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+                          {testimonialList[currentTestimonialIdx].universityName && (
+                            <p className="text-sm font-medium text-primary">
+                              {testimonialList[currentTestimonialIdx].universityName}
+                            </p>
+                          )}
+                          {testimonialList[currentTestimonialIdx].date && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {testimonialList[currentTestimonialIdx].date}
+                            </p>
+                          )}
+                        </motion.div>
+                      </AnimatePresence>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
 
-              {/* Indicators */}
-              <div className="flex gap-2 mt-10 justify-center lg:justify-start">
-                {testimonialList.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentTestimonialIdx(i)}
-                    className={cn(
-                      "h-2 rounded-full transition-all duration-300",
-                      currentTestimonialIdx === i
-                        ? "w-8 bg-primary"
-                        : "w-2 bg-primary/20",
-                    )}
-                  />
-                ))}
+                  </div>
+
+                  {/* Prev / next — placed below the rail so they never overlap the photos */}
+                  <div className="mt-6 flex items-center justify-center gap-3">
+                    <Button size="icon" variant="outline" onClick={prevTestimonial} className="h-10 w-10 rounded-full" aria-label="Previous review">
+                      <ChevronLeft className="h-5 w-5" />
+                    </Button>
+                    <Button size="icon" variant="outline" onClick={nextTestimonial} className="h-10 w-10 rounded-full" aria-label="Next review">
+                      <ChevronRight className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Quote */}
+                <div className="relative lg:col-span-7">
+                  <Quote className="absolute -top-6 -left-1 h-14 w-14 text-primary/15" />
+                  <AnimatePresence mode="wait">
+                    <motion.blockquote
+                      key={testimonialList[currentTestimonialIdx].id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.4 }}
+                      className="relative"
+                    >
+                      <p className="font-serif text-xl italic leading-relaxed text-foreground/85 md:text-2xl md:leading-relaxed">
+                        {testimonialList[currentTestimonialIdx].content}
+                      </p>
+                      <footer className="mt-6 text-sm font-medium text-muted-foreground">
+                        — {testimonialList[currentTestimonialIdx].studentName}
+                        {testimonialList[currentTestimonialIdx].universityName
+                          ? `, ${testimonialList[currentTestimonialIdx].universityName}`
+                          : ""}
+                      </footer>
+                    </motion.blockquote>
+                  </AnimatePresence>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
 

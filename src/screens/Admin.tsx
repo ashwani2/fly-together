@@ -12,6 +12,7 @@ import {
   type ApplicationTimelineEntry,
   type StudentDocument,
   type DocStatus,
+  type SopLead,
 } from '@/lib/api';
 import { Progress } from '@/components/ui/progress';
 import { DocumentViewer } from '@/components/DocumentViewer';
@@ -45,6 +46,8 @@ import {
   Download,
   Check,
   Pencil,
+  Undo2,
+  Video,
 } from 'lucide-react';
 import { Markdown } from '@/lib/markdown';
 import { downloadSopPdf, downloadSopDocx } from '@/lib/sopExport';
@@ -122,6 +125,13 @@ const nextStatus = (s: ApplicationStatus): ApplicationStatus | null => {
   return STATUS_ORDER[idx + 1];
 };
 
+// Previous phase in the pipeline — used to roll an application back a step.
+const prevStatus = (s: ApplicationStatus): ApplicationStatus | null => {
+  const idx = STATUS_ORDER.indexOf(s);
+  if (idx <= 0) return null;
+  return STATUS_ORDER[idx - 1];
+};
+
 const statusBadge: Record<ApplicationStatus, string> = {
   CREATED: 'bg-muted text-muted-foreground hover:bg-muted',
   REJECTED: 'bg-red-500/10 text-red-600 hover:bg-red-500/20',
@@ -192,7 +202,7 @@ export default function Admin() {
   const [rejecting, setRejecting] = useState(false);
 
   const [paymentLinkTarget, setPaymentLinkTarget] = useState<AdminApplication | null>(null);
-  const [paymentLink, setPaymentLink] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
   const [savingPaymentLink, setSavingPaymentLink] = useState(false);
 
   // Student list dialog (server-side paginated + searched)
@@ -223,6 +233,26 @@ export default function Admin() {
   const [sopContent, setSopContent] = useState('');
   const [sopMode, setSopMode] = useState<'view' | 'edit'>('view');
   const [sopCopied, setSopCopied] = useState(false);
+
+  // SOP Leads dialog (server-side paginated + searched) — captured from the
+  // public landing-page SOP generator.
+  const [sopLeadsOpen, setSopLeadsOpen] = useState(false);
+  const [sopLeads, setSopLeads] = useState<SopLead[]>([]);
+  const [sopLeadsLoading, setSopLeadsLoading] = useState(false);
+  const [sopLeadSearch, setSopLeadSearch] = useState('');
+  const [sopLeadDebouncedSearch, setSopLeadDebouncedSearch] = useState('');
+  const [sopLeadPage, setSopLeadPage] = useState(1);
+  const [sopLeadPageSize, setSopLeadPageSize] = useState(10);
+  const [sopLeadTotal, setSopLeadTotal] = useState(0);
+  const [sopLeadTotalPages, setSopLeadTotalPages] = useState(1);
+  const [sopLeadPageSizeMenuOpen, setSopLeadPageSizeMenuOpen] = useState(false);
+
+  // Schedule Google Meet dialog
+  const [meetTarget, setMeetTarget] = useState<AdminApplication | null>(null);
+  const [meetDate, setMeetDate] = useState('');
+  const [meetLink, setMeetLink] = useState('');
+  const [meetNote, setMeetNote] = useState('');
+  const [scheduling, setScheduling] = useState(false);
 
   // Stats + agent network — loaded once.
   const loadMeta = useCallback(async () => {
@@ -298,10 +328,10 @@ export default function Admin() {
       swal.info('This application has already reached the final phase.');
       return;
     }
-    // Advancing to PAYMENT_PENDING requires a payment link first.
+    // Advancing to PAYMENT_PENDING initializes a Flywire payment first.
     if (target === 'PAYMENT_PENDING') {
       setPaymentLinkTarget(application);
-      setPaymentLink('');
+      setPaymentAmount('');
       return;
     }
     setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: target } : a)));
@@ -329,34 +359,94 @@ export default function Admin() {
     }
   };
 
+  const handleRollback = async (application: AdminApplication) => {
+    const target = prevStatus(application.status);
+    if (!target) return;
+    const ok = await swal.confirm(
+      `Move ${application.student.name}'s application back to “${STATUS_LABELS[target]}”? The student will be notified by email.`,
+      { title: 'Roll back a phase?', confirmText: 'Roll back', variant: 'warning' },
+    );
+    if (!ok) return;
+    setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: target } : a)));
+    setSelected((cur) => (cur && cur.id === application.id ? { ...cur, status: target } : cur));
+    try {
+      await api.applications.setStatus(application.id, target);
+      if (selected?.id === application.id) {
+        api.applications.timeline(application.id).then(setTimeline).catch(() => {});
+      }
+      toast.success(
+        `${application.student.name}'s application moved back to “${STATUS_LABELS[target]}”.`,
+        'Phase rolled back',
+      );
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not roll back the status.');
+      refreshApps();
+    }
+  };
+
+  const openMeetDialog = (application: AdminApplication) => {
+    setMeetTarget(application);
+    setMeetDate('');
+    setMeetLink('');
+    setMeetNote('');
+  };
+
+  const submitMeeting = async () => {
+    if (!meetTarget || !meetDate || !meetLink.trim()) return;
+    setScheduling(true);
+    try {
+      const scheduledAt = new Date(meetDate).toISOString();
+      await api.applications.scheduleMeeting(meetTarget.id, {
+        scheduledAt,
+        meetLink: meetLink.trim(),
+        note: meetNote.trim() || undefined,
+      });
+      // Refresh the open details timeline so the meeting appears immediately.
+      if (selected?.id === meetTarget.id) {
+        api.applications.timeline(meetTarget.id).then(setTimeline).catch(() => {});
+      }
+      toast.success(
+        `Google Meet scheduled for ${meetTarget.student.name}. The student has been emailed the link.`,
+        'Meeting scheduled',
+      );
+      setMeetTarget(null);
+    } catch (e: any) {
+      swal.error(e?.message || 'Could not schedule the meeting.');
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const submitPaymentLink = async () => {
-    if (!paymentLinkTarget || !paymentLink.trim()) return;
+    const amount = Number(paymentAmount);
+    if (!paymentLinkTarget || !(amount > 0)) return;
     setSavingPaymentLink(true);
     try {
-      await api.applications.setStatus(paymentLinkTarget.id, 'PAYMENT_PENDING');
-      await api.applications.setPayment(paymentLinkTarget.id, 'PENDING', paymentLink.trim());
+      // Initialize a real Flywire payment — this advances the application to
+      // PAYMENT_PENDING and stores the pay link returned by Flywire.
+      const updated = await api.applications.initializeFlywire(paymentLinkTarget.id, amount);
       setApps((prev) =>
         prev.map((a) =>
           a.id === paymentLinkTarget.id
-            ? { ...a, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: paymentLink.trim(), paymentStatus: 'PENDING' }
+            ? { ...a, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: updated.paymentLink, paymentStatus: updated.paymentStatus }
             : a,
         ),
       );
       setSelected((cur) =>
         cur && cur.id === paymentLinkTarget.id
-          ? { ...cur, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: paymentLink.trim(), paymentStatus: 'PENDING' }
+          ? { ...cur, status: 'PAYMENT_PENDING' as ApplicationStatus, paymentLink: updated.paymentLink, paymentStatus: updated.paymentStatus }
           : cur,
       );
       if (selected?.id === paymentLinkTarget.id) {
         api.applications.timeline(paymentLinkTarget.id).then(setTimeline).catch(() => {});
       }
       toast.success(
-        `${paymentLinkTarget.student.name}'s application moved to “${STATUS_LABELS.PAYMENT_PENDING}”.`,
-        'Application advanced',
+        `Flywire payment initialized for ${paymentLinkTarget.student.name}. Application moved to “${STATUS_LABELS.PAYMENT_PENDING}”.`,
+        'Payment initialized',
       );
       setPaymentLinkTarget(null);
     } catch (e: any) {
-      swal.error(e?.message || 'Could not save payment link.');
+      swal.error(e?.message || 'Could not initialize the Flywire payment.');
     } finally {
       setSavingPaymentLink(false);
     }
@@ -432,6 +522,38 @@ export default function Admin() {
     }, 400);
     return () => clearTimeout(t);
   }, [studentSearch]);
+
+  const openSopLeads = () => {
+    setSopLeadSearch('');
+    setSopLeadDebouncedSearch('');
+    setSopLeadPage(1);
+    setSopLeadsOpen(true);
+  };
+
+  const fetchSopLeads = useCallback(async () => {
+    setSopLeadsLoading(true);
+    try {
+      const res = await api.sopLeads.list({ page: sopLeadPage, pageSize: sopLeadPageSize, search: sopLeadDebouncedSearch });
+      setSopLeads(res.items);
+      setSopLeadTotal(res.total);
+      setSopLeadTotalPages(res.totalPages);
+      if (res.page > res.totalPages) setSopLeadPage(res.totalPages);
+    } catch { swal.error('Could not load SOP leads.'); }
+    finally { setSopLeadsLoading(false); }
+  }, [sopLeadPage, sopLeadPageSize, sopLeadDebouncedSearch]);
+
+  useEffect(() => {
+    if (sopLeadsOpen) fetchSopLeads();
+  }, [sopLeadsOpen, fetchSopLeads]);
+
+  // Debounce the SOP-lead search → reset to first page.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSopLeadDebouncedSearch(sopLeadSearch.trim());
+      setSopLeadPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [sopLeadSearch]);
 
   const openStudentDetail = async (s: AdminStudentSummary) => {
     setStudentDetail(null);
@@ -555,9 +677,14 @@ export default function Admin() {
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
-        <p className="text-muted-foreground">Manage student applications, assign agents, and grow your agent network.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
+          <p className="text-muted-foreground">Manage student applications, assign agents, and grow your agent network.</p>
+        </div>
+        <Button variant="outline" className="gap-2 self-start" onClick={openSopLeads}>
+          <Sparkles className="w-4 h-4 text-violet-500" /> SOP Leads
+        </Button>
       </div>
 
       {/* Stat cards — live from DB */}
@@ -762,6 +889,14 @@ export default function Admin() {
                           <TableCell className="text-right px-6">
                             <div className="flex items-center justify-end gap-1">
                               <button
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-amber-500 hover:bg-amber-500/10 disabled:opacity-30"
+                                onClick={() => handleRollback(a)}
+                                disabled={a.status === 'REJECTED' || !prevStatus(a.status)}
+                                title="Roll back to previous phase"
+                              >
+                                <Undo2 className="w-4 h-4" />
+                              </button>
+                              <button
                                 className="h-8 w-8 inline-flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/10 disabled:opacity-30"
                                 onClick={() => handleAdvance(a)}
                                 disabled={a.status === 'COMPLETED' || a.status === 'REJECTED' || !nextStatus(a.status)}
@@ -783,6 +918,13 @@ export default function Admin() {
                                 title="Generate SOP"
                               >
                                 <Sparkles className="w-4 h-4" />
+                              </button>
+                              <button
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sky-500 hover:bg-sky-500/10 disabled:opacity-30"
+                                onClick={() => openMeetDialog(a)}
+                                title="Schedule Interview"
+                              >
+                                <Video className="w-4 h-4" />
                               </button>
                               <button
                                 className="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
@@ -985,6 +1127,121 @@ export default function Admin() {
         </DialogContent>
       </Dialog>
 
+      {/* ---------------- SOP Leads dialog ---------------- */}
+      <Dialog open={sopLeadsOpen} onOpenChange={(o) => { setSopLeadsOpen(o); if (!o) setSopLeadSearch(''); }}>
+        <DialogContent className="sm:max-w-2xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+          <div className="flex-none p-6 border-b bg-muted/20">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-violet-500" /> SOP Leads</DialogTitle>
+              <DialogDescription>Prospective students who generated a Statement of Purpose from the website.</DialogDescription>
+            </DialogHeader>
+            <div className="relative mt-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                value={sopLeadSearch}
+                onChange={(e) => setSopLeadSearch(e.target.value)}
+                placeholder="Search by name, university, course..."
+                className="w-full pl-10 pr-4 h-10 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {sopLeadsLoading ? (
+              <BrandedLoader label="Loading SOP leads…" className="py-16" />
+            ) : sopLeads.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-16">
+                {sopLeadDebouncedSearch ? `No leads match "${sopLeadDebouncedSearch}".` : 'No SOP leads captured yet.'}
+              </p>
+            ) : (
+              sopLeads.map((lead) => (
+                <div
+                  key={lead.id}
+                  className="rounded-xl border border-border bg-card p-4"
+                >
+                  <div className="flex items-start gap-4">
+                    <InitialsAvatar name={lead.fullName} className="w-10 h-10" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{lead.fullName}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {lead.course} · {lead.university}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {lead.country && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                            <MapPin className="w-3 h-3" /> {lead.country}
+                          </span>
+                        )}
+                        {lead.campus && (
+                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {lead.campus}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
+                      <CalendarDays className="w-3.5 h-3.5" /> {fmtDate(lead.createdAt)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* SOP-lead pagination */}
+          <div className="flex-none flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span>
+                {sopLeadTotal === 0
+                  ? 'No results'
+                  : `${(sopLeadPage - 1) * sopLeadPageSize + 1}–${Math.min(sopLeadPage * sopLeadPageSize, sopLeadTotal)} of ${sopLeadTotal}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline">Rows</span>
+                <DropdownMenu open={sopLeadPageSizeMenuOpen} onOpenChange={setSopLeadPageSizeMenuOpen}>
+                  <DropdownMenuTrigger render={
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                      {sopLeadPageSize}
+                      <ChevronDown className="w-3 h-3 opacity-50" />
+                    </Button>
+                  } />
+                  <DropdownMenuContent align="start" className="min-w-[80px]">
+                    <DropdownMenuRadioGroup
+                      value={String(sopLeadPageSize)}
+                      onValueChange={(v) => { setSopLeadPageSize(Number(v)); setSopLeadPage(1); setSopLeadPageSizeMenuOpen(false); }}
+                    >
+                      {[5, 10, 20, 50].map((n) => (
+                        <DropdownMenuRadioItem key={n} value={String(n)}>{n}</DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Page {sopLeadPage} of {sopLeadTotalPages}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                disabled={sopLeadPage <= 1 || sopLeadsLoading}
+                onClick={() => setSopLeadPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                disabled={sopLeadPage >= sopLeadTotalPages || sopLeadsLoading}
+                onClick={() => setSopLeadPage((p) => Math.min(sopLeadTotalPages, p + 1))}
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ---------------- Student detail dialog ---------------- */}
       <Dialog open={!!studentDetail || studentDetailLoading} onOpenChange={(o) => { if (!o) { setStudentDetail(null); closeDocViewer(); } }}>
         <DialogContent className="sm:max-w-2xl w-[98vw] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
@@ -1053,39 +1310,42 @@ export default function Admin() {
         </DialogContent>
       </Dialog>
 
-      {/* ---------------- Payment link dialog ---------------- */}
+      {/* ---------------- Flywire payment dialog ---------------- */}
       <Dialog open={!!paymentLinkTarget} onOpenChange={(o) => !o && setPaymentLinkTarget(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" /> Add Payment Link
+              <CreditCard className="w-5 h-5 text-primary" /> Initialize Flywire Payment
             </DialogTitle>
             <DialogDescription>
               {paymentLinkTarget?.student.name} — {paymentLinkTarget?.universityName}, {paymentLinkTarget?.course}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-2">
-            <label className="text-sm font-medium">Payment link <span className="text-destructive">*</span></label>
+            <label className="text-sm font-medium">Amount <span className="text-destructive">*</span></label>
             <input
-              type="url"
-              value={paymentLink}
-              onChange={(e) => setPaymentLink(e.target.value)}
-              placeholder="https://pay.flywire.com/..."
+              type="number"
+              min="1"
+              step="0.01"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+              placeholder="e.g. 4800"
               className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <p className="text-xs text-muted-foreground">
-              This link will be shown to the student on their application page so they can complete payment.
+              We'll create the payment with Flywire and generate a secure pay link for the student.
+              The amount is charged in the destination's currency.
             </p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setPaymentLinkTarget(null)}>Cancel</Button>
             <Button
-              disabled={!paymentLink.trim() || savingPaymentLink}
+              disabled={!(Number(paymentAmount) > 0) || savingPaymentLink}
               onClick={submitPaymentLink}
               className="gap-2"
             >
               {savingPaymentLink && <Loader2 className="w-4 h-4 animate-spin" />}
-              Save &amp; Advance
+              Initialize &amp; Advance
             </Button>
           </div>
         </DialogContent>
@@ -1205,12 +1465,31 @@ export default function Admin() {
                     <li key={t.id} className="ml-4">
                       <div className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full bg-primary" />
                       <div className="flex items-center gap-2">
-                        <ChevronRight className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-sm font-medium">{t.action.replace(/_/g, ' ')}</span>
+                        {t.action === 'MEETING_SCHEDULED'
+                          ? <Video className="w-3.5 h-3.5 text-primary" />
+                          : <ChevronRight className="w-3.5 h-3.5 text-primary" />}
+                        <span className="text-sm font-medium">
+                          {t.action === 'MEETING_SCHEDULED' ? 'Google Meet scheduled' : t.action.replace(/_/g, ' ')}
+                        </span>
                       </div>
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Clock className="w-3 h-3" /> {fmtDate(t.createdAt)}
                       </p>
+                      {t.action === 'MEETING_SCHEDULED' && t.meetingLink && (
+                        <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+                          {t.meetingAt && (
+                            <p className="text-xs font-medium text-foreground">{new Date(t.meetingAt).toLocaleString()}</p>
+                          )}
+                          <a
+                            href={t.meetingLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                          >
+                            <Video className="w-3.5 h-3.5" /> Join Google Meet
+                          </a>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -1231,6 +1510,15 @@ export default function Admin() {
                 <XCircle className="w-4 h-4" /> Reject
               </Button>
             )}
+            {selected && selected.status !== 'REJECTED' && prevStatus(selected.status) && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => handleRollback(selected)}
+              >
+                <Undo2 className="w-4 h-4" /> Roll back to {STATUS_LABELS[prevStatus(selected.status)!]}
+              </Button>
+            )}
             {selected && nextStatus(selected.status) && (
               <Button
                 className="gap-2"
@@ -1239,6 +1527,68 @@ export default function Admin() {
                 <CheckCircle2 className="w-4 h-4" /> Advance to {STATUS_LABELS[nextStatus(selected.status)!]}
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- Schedule Google Meet dialog ---------------- */}
+      <Dialog open={!!meetTarget} onOpenChange={(o) => { if (!o) setMeetTarget(null); }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Video className="w-5 h-5 text-sky-500" /> Schedule Interview
+            </DialogTitle>
+            <DialogDescription>
+              {meetTarget?.student.name} — {meetTarget?.universityName}, {meetTarget?.course}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Date &amp; time</label>
+              <Input type="datetime-local" value={meetDate} onChange={(e) => setMeetDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Google Meet link</label>
+                <a
+                  href="https://meet.google.com/new"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  <Video className="w-3.5 h-3.5" /> Create a meeting
+                </a>
+              </div>
+              <Input
+                placeholder="https://meet.google.com/abc-defg-hij"
+                value={meetLink}
+                onChange={(e) => setMeetLink(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Click “Create a meeting”, copy the link from Google Meet, and paste it here.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Note <span className="text-muted-foreground">(optional)</span></label>
+              <textarea
+                value={meetNote}
+                onChange={(e) => setMeetNote(e.target.value)}
+                rows={2}
+                placeholder="Anything the student should prepare or know."
+                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setMeetTarget(null)}>Cancel</Button>
+            <Button
+              className="gap-2"
+              disabled={!meetDate || !meetLink.trim() || scheduling}
+              onClick={submitMeeting}
+            >
+              {scheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+              Schedule &amp; Email Student
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1268,7 +1618,7 @@ export default function Admin() {
                   Review the details below and fill in anything that's missing. These are used to generate the Statement of Purpose.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <SopField label="Full Name" required value={sopForm.fullName} onChange={(v) => setSopForm((f) => ({ ...f, fullName: v }))} placeholder="e.g. Ashwani Kumar" />
+                  <SopField label="Full Name" required value={sopForm.fullName} onChange={(v) => setSopForm((f) => ({ ...f, fullName: v }))} placeholder="e.g. John Doe" />
                   <SopField label="Country" value={sopForm.country} onChange={(v) => setSopForm((f) => ({ ...f, country: v }))} placeholder="e.g. United Kingdom" />
                   <SopField label="University" required value={sopForm.university} onChange={(v) => setSopForm((f) => ({ ...f, university: v }))} placeholder="e.g. University of Hull" />
                   <SopField label="Campus" value={sopForm.campus} onChange={(v) => setSopForm((f) => ({ ...f, campus: v }))} placeholder="e.g. London Campus" />

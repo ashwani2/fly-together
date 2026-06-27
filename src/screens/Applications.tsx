@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  CheckCircle2, Clock, CreditCard, ShieldCheck, Loader2, GraduationCap, Plus, ChevronRight, XCircle,
+  CheckCircle2, Clock, CreditCard, ShieldCheck, Loader2, GraduationCap, Plus, ChevronRight, XCircle, RefreshCw, Video,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { api, type Application, type ApplicationTimelineEntry } from '@/lib/api';
+import { api, FLYWIRE_STATUS_LABELS, type Application, type ApplicationTimelineEntry } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { useNavigate } from 'react-router-dom';
 
 const prettyStatus: Record<string, string> = {
@@ -18,6 +19,7 @@ const prettyStatus: Record<string, string> = {
   VERIFIED_BY_UNIVERSITY: 'Verified by University',
   PAYMENT_PENDING: 'Payment Pending',
   COMPLETED: 'Completed',
+  MEETING_SCHEDULED: 'Google Meet Scheduled',
 };
 
 const prettyAction = (action: string) => {
@@ -44,6 +46,7 @@ export default function Applications() {
   const [selected, setSelected] = useState<Application | null>(null);
   const [timeline, setTimeline] = useState<ApplicationTimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingPayment, setRefreshingPayment] = useState(false);
 
   const loadApps = async (selectId?: string) => {
     setLoading(true);
@@ -67,6 +70,24 @@ export default function Applications() {
   const selectApp = async (a: Application) => {
     setSelected(a);
     try { setTimeline(await api.applications.timeline(a.id)); } catch { setTimeline([]); }
+  };
+
+  const refreshPaymentStatus = async (a: Application) => {
+    setRefreshingPayment(true);
+    try {
+      const updated = await api.applications.refreshFlywire(a.id);
+      setApps((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      setSelected((cur) => (cur && cur.id === updated.id ? updated : cur));
+      try { setTimeline(await api.applications.timeline(updated.id)); } catch { /* keep existing */ }
+      const label = updated.flywirePayment
+        ? FLYWIRE_STATUS_LABELS[updated.flywirePayment.flywireStatus]
+        : updated.paymentStatus;
+      toast.success(`Payment status: ${label}.`, 'Status refreshed');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not refresh payment status.', 'Refresh failed');
+    } finally {
+      setRefreshingPayment(false);
+    }
   };
 
   if (loading) {
@@ -174,7 +195,24 @@ export default function Applications() {
                               <time className="font-mono text-xs text-primary">{new Date(item.createdAt).toLocaleDateString()}</time>
                             </div>
                             <div className="text-muted-foreground text-sm">
-                              {item.action === 'CREATED'
+                              {item.action === 'MEETING_SCHEDULED' ? (
+                                <div>
+                                  <p>
+                                    A Google Meet has been scheduled
+                                    {item.meetingAt ? ` for ${new Date(item.meetingAt).toLocaleString()}` : ''}.
+                                  </p>
+                                  {item.meetingLink && (
+                                    <a
+                                      href={item.meetingLink}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                                    >
+                                      <Video className="w-3.5 h-3.5" /> Join Google Meet
+                                    </a>
+                                  )}
+                                </div>
+                              ) : item.action === 'CREATED'
                                 ? 'Your application was submitted.'
                                 : item.action.startsWith('REUPLOAD_REQUESTED')
                                 ? 'A document was rejected during review. Please re-upload it from Profile & Documents.'
@@ -210,7 +248,9 @@ export default function Applications() {
                             : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
                       }
                     >
-                      {selected.paymentStatus.charAt(0) + selected.paymentStatus.slice(1).toLowerCase()}
+                      {selected.flywirePayment
+                        ? FLYWIRE_STATUS_LABELS[selected.flywirePayment.flywireStatus]
+                        : selected.paymentStatus.charAt(0) + selected.paymentStatus.slice(1).toLowerCase()}
                     </Badge>
                   </div>
                 </CardContent>
@@ -218,6 +258,10 @@ export default function Applications() {
                   {selected.paymentStatus === 'COMPLETED' ? (
                     <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-500/10 py-3 text-sm font-bold text-green-600">
                       <CheckCircle2 className="h-5 w-5" /> Payment complete
+                    </div>
+                  ) : selected.paymentStatus === 'FAILED' ? (
+                    <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 py-3 text-sm font-bold text-red-600">
+                      <XCircle className="h-5 w-5" /> Payment cancelled
                     </div>
                   ) : selected.paymentLink ? (
                     <>
@@ -227,6 +271,17 @@ export default function Applications() {
                       >
                         Pay Securely Now
                       </Button>
+                      {selected.flywirePayment && (
+                        <Button
+                          variant="outline"
+                          className="w-full gap-2"
+                          disabled={refreshingPayment}
+                          onClick={() => refreshPaymentStatus(selected)}
+                        >
+                          <RefreshCw className={cn('w-4 h-4', refreshingPayment && 'animate-spin')} />
+                          Refresh status
+                        </Button>
+                      )}
                       <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
                         <ShieldCheck className="w-3 h-3" />
                         Secured payment via Flywire
