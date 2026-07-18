@@ -654,7 +654,18 @@ function dedupe<T>(key: string, run: () => Promise<T>): Promise<T> {
 
 // ---------- Endpoint groups ----------
 
+export interface City {
+  id: string;
+  name: string;
+  country: string;
+}
+
 export const api = {
+  // Public reference data for the course-search location picker.
+  cities: {
+    list: (country?: string) => rawRequest<City[]>(`/cities${q({ country })}`, { auth: false }),
+  },
+
   auth: {
     register: (body: { email: string; password: string; role?: 'STUDENT' | 'AGENT'; consent: true; name?: string; phoneNumber?: string; gender?: Gender }) =>
       rawRequest<AuthResult>('/auth/register', { method: 'POST', body, auth: false }),

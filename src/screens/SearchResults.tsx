@@ -19,6 +19,7 @@ import { ThemeScopeWrapper } from '@/lib/ThemeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { AuthModal } from '@/components/AuthModal';
 import { ApplicationPreview } from '@/components/ApplicationPreview';
+import { CourseLocationModal, type CourseLocation } from '@/components/CourseLocationModal';
 import { swal } from '@/lib/swal';
 
 const COURSE_SUGGESTIONS = [
@@ -78,6 +79,17 @@ interface Course {
   price: string;
 }
 
+// The search service returns `price` as a display-ready string with the local
+// currency (e.g. "£34,000", "$40,000–$44,000"). Older/bare responses may still
+// be a plain number — in that case format with separators (no assumed currency,
+// since results are no longer UK-only).
+function formatPrice(price: string): string {
+  const raw = (price ?? '').trim();
+  if (!raw) return 'Contact university';
+  if (/^\d[\d,]*(\.\d+)?$/.test(raw)) return Number(raw.replace(/,/g, '')).toLocaleString();
+  return raw;
+}
+
 interface University {
   universityName: string;
   location: string;
@@ -103,9 +115,13 @@ export default function SearchResults() {
   const [searchQuery, setSearchQuery] = React.useState(initialQuery);
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const [results, setResults] = React.useState<University[]>([]);
-  const [searched, setSearched] = React.useState(!!initialQuery);
+  const [searched, setSearched] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Course awaiting a country/city choice — non-null opens the location modal.
+  const [pendingCourse, setPendingCourse] = React.useState<string | null>(null);
+  // Kept across searches so the results heading and re-searches stay location-aware.
+  const [searchLocation, setSearchLocation] = React.useState<CourseLocation | null>(null);
 
   const suggestions = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -125,8 +141,8 @@ export default function SearchResults() {
     }
   };
 
-  const fetchResults = async (query: string) => {
-    if (!query) return;
+  const fetchResults = async (course: string, loc: CourseLocation) => {
+    if (!course) return;
     setShowSuggestions(false);
     setSearched(true);
     setLoading(true);
@@ -135,7 +151,7 @@ export default function SearchResults() {
       const response = await fetch('https://universitysearch-jvqc.onrender.com/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query: course, country: loc.country, city: loc.city }),
       });
       const data: SearchResponse = await response.json();
       if (data.success) {
@@ -151,18 +167,33 @@ export default function SearchResults() {
     }
   };
 
-  const pickSuggestion = (s: string) => {
-    setSearchQuery(s);
-    fetchResults(s);
+  // Every course selection funnels through here: stash the course and open the
+  // country/city modal instead of searching straight away.
+  const selectCourse = (course: string) => {
+    const trimmed = course.trim();
+    if (!trimmed) return;
+    setSearchQuery(trimmed);
+    setShowSuggestions(false);
+    setPendingCourse(trimmed);
   };
 
+  const runSearch = (loc: CourseLocation) => {
+    const course = pendingCourse;
+    setSearchLocation(loc);
+    setPendingCourse(null);
+    if (course) fetchResults(course, loc);
+  };
+
+  const pickSuggestion = (s: string) => selectCourse(s);
+
   React.useEffect(() => {
-    if (initialQuery) fetchResults(initialQuery);
+    if (initialQuery) selectCourse(initialQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) fetchResults(searchQuery.trim());
+    selectCourse(searchQuery);
   };
 
   return (
@@ -183,7 +214,7 @@ export default function SearchResults() {
                   onChange={(e) => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
                   onFocus={() => setShowSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (searchQuery.trim()) fetchResults(searchQuery.trim()); } }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selectCourse(searchQuery); } }}
                   placeholder="Search for Artificial Intelligence, Business..."
                   autoComplete="off"
                   className="w-full pl-10 pr-28 h-12 rounded-full border border-primary/20 bg-background text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -264,7 +295,9 @@ export default function SearchResults() {
           {loading && (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <Loader2 className="w-12 h-12 animate-spin text-primary" />
-              <p className="text-lg font-medium text-muted-foreground animate-pulse">Scanning top UK universities...</p>
+              <p className="text-lg font-medium text-muted-foreground animate-pulse">
+                {searchLocation ? `Scanning top universities in ${searchLocation.city}, ${searchLocation.country}...` : 'Scanning top universities...'}
+              </p>
             </div>
           )}
 
@@ -277,7 +310,12 @@ export default function SearchResults() {
                   <h3 className="text-xl font-bold">Something went wrong</h3>
                   <p className="text-muted-foreground">{error}</p>
                 </div>
-                <Button onClick={() => fetchResults(searchQuery)} variant="outline">Try Again</Button>
+                <Button
+                  onClick={() => { if (searchLocation) fetchResults(searchQuery, searchLocation); }}
+                  variant="outline"
+                >
+                  Try Again
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -306,7 +344,10 @@ export default function SearchResults() {
             <>
               <div className="mb-8">
                 <h1 className="text-3xl font-bold tracking-tight">Search Results</h1>
-                <p className="text-muted-foreground mt-1">Found {results.length} universities for "{searchQuery}"</p>
+                <p className="text-muted-foreground mt-1">
+                  Found {results.length} universities for "{searchQuery}"
+                  {searchLocation ? ` in ${searchLocation.city}, ${searchLocation.country}` : ''}
+                </p>
               </div>
               <div className="grid grid-cols-1 gap-8">
                 {results.map((uni, idx) => (
@@ -351,7 +392,7 @@ export default function SearchResults() {
                                 <h4 className="font-bold leading-snug">{course.courseName}</h4>
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm text-muted-foreground">Annual Fee</span>
-                                  <span className="font-mono text-primary font-bold">£{Number(course.price).toLocaleString()}</span>
+                                  <span className="font-mono text-primary font-bold">{formatPrice(course.price)}</span>
                                 </div>
                               </div>
                             ))}
@@ -365,6 +406,14 @@ export default function SearchResults() {
             </>
           )}
         </main>
+
+        <CourseLocationModal
+          open={pendingCourse !== null}
+          course={pendingCourse ?? ''}
+          initial={searchLocation ?? undefined}
+          onClose={() => setPendingCourse(null)}
+          onSubmit={runSearch}
+        />
 
         <AuthModal
           open={authOpen}

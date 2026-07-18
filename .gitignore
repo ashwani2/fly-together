@@ -6,3 +6,4 @@ coverage/
 !.env.example
 !.env.uat.example
 build
+CLAUDE.md
